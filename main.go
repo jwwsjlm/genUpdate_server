@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/gin-gonic/gin"
+	json "github.com/json-iterator/go"
 	"github.com/jwwsjlm/genUpdate_srver/auth"
 	"github.com/jwwsjlm/genUpdate_srver/db"
 	"github.com/jwwsjlm/genUpdate_srver/fileutils"
