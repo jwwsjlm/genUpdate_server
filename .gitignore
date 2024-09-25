@@ -199,3 +199,4 @@ fabric.properties
 /Update-linux
 /log/*.log
 /tmp
+/update/*.json
