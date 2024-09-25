@@ -12,24 +12,7 @@
                 "name": "qqwry.dat",
                 "size": 25272339,
                 "sha256": "830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3",
-                "downloadURL": "/download/crq9dm35p390vg3mnal0"
-            }
-        ]
-    },
-    "jsonBody.json": {
-        "fileName": "jsonBody.json",
-        "ReleaseNote": {
-            "appName": "jsonBody.json",
-            "description": "null",
-            "version": "1.0.0"
-        },
-        "fileList": [
-            {
-                "path": "jsonBody.json",
-                "name": "jsonBody.json",
-                "size": 2269,
-                "sha256": "346aff5a7e1c0d5fea11c176da589a6ad8725a4386042b3ec414335c7cc48683",
-                "downloadURL": "/download/crq9dm35p390vg3mnalg"
+                "downloadURL": "/download/crq9h435p394ct4ospj0"
             }
         ]
     },
@@ -46,42 +29,42 @@
                 "name": "DllInject.exe",
                 "size": 2686976,
                 "sha256": "e220d39248024bbe54ffc1737b8924711b595cfe4301a72c1483be0522b1b843",
-                "downloadURL": "/download/crq9dm35p390vg3mnam0"
+                "downloadURL": "/download/crq9h435p394ct4ospjg"
             },
             {
                 "path": "星月\\ReleaseNote.txt",
                 "name": "ReleaseNote.txt",
                 "size": 141,
                 "sha256": "d52188b994cb27cb3cb0d209d89ea789d20093407e0c8644b7859ac8786989c4",
-                "downloadURL": "/download/crq9dm35p390vg3mnamg"
+                "downloadURL": "/download/crq9h435p394ct4ospk0"
             },
             {
                 "path": "星月\\data\\client.dll",
                 "name": "client.dll",
                 "size": 7253584,
                 "sha256": "84986b784d7a263da991d3be04bbafa25e1669453b7b7ad6efdd0abc8547e9af",
-                "downloadURL": "/download/crq9dm35p390vg3mnan0"
+                "downloadURL": "/download/crq9h435p394ct4ospkg"
             },
             {
                 "path": "星月\\data\\sql.txt",
                 "name": "sql.txt",
                 "size": 0,
                 "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "downloadURL": "/download/crq9dm35p390vg3mnang"
+                "downloadURL": "/download/crq9h435p394ct4ospl0"
             },
             {
                 "path": "星月\\qqwry - 副本.exe",
                 "name": "qqwry - 副本.exe",
                 "size": 25272339,
                 "sha256": "830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3",
-                "downloadURL": "/download/crq9dm35p390vg3mnao0"
+                "downloadURL": "/download/crq9h4b5p394ct4osplg"
             },
             {
                 "path": "星月\\qqwry.dat",
                 "name": "qqwry.dat",
                 "size": 25272339,
                 "sha256": "830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3",
-                "downloadURL": "/download/crq9dm35p390vg3mnaog"
+                "downloadURL": "/download/crq9h4b5p394ct4ospm0"
             }
         ]
     },
@@ -98,7 +81,7 @@
                 "name": "qqwry.dat",
                 "size": 25272339,
                 "sha256": "830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3",
-                "downloadURL": "/download/crq9dm35p390vg3mnap0"
+                "downloadURL": "/download/crq9h4b5p394ct4ospmg"
             }
         ]
     }
