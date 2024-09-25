@@ -8,6 +8,7 @@ import (
 	"github.com/jwwsjlm/genUpdate_srver/auth"
 	"github.com/jwwsjlm/genUpdate_srver/db"
 	"github.com/jwwsjlm/genUpdate_srver/utils"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/rs/xid"
 	"os"
 	"path/filepath"
@@ -79,8 +80,11 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 		if err != nil {
 			return err
 		}
-
-		guid := xid.New().String()
+		guid, err := gonanoid.New()
+		if err != nil {
+			guid = xid.New().String()
+		}
+		//guid := xid.New().String()
 		err = db.PutWithTTL(guid, relativePath, 600)
 
 		if err != nil {
