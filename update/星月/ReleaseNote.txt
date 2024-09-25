@@ -1,0 +1,5 @@
+{
+  "appName": "星月",
+  "description": "This release includes several bug fixes and performance improvements.",
+  "version": "1.0.0"
+}
