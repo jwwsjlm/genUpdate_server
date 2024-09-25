@@ -1,10 +1,10 @@
 package fileutils
 
 import (
-	"encoding/json"
 	"fmt"
 	ignore "github.com/Diogenesoftoronto/go-gitignore"
 	"github.com/duke-git/lancet/v2/fileutil"
+	json "github.com/json-iterator/go"
 	"github.com/jwwsjlm/genUpdate_srver/auth"
 	"github.com/jwwsjlm/genUpdate_srver/db"
 	"github.com/jwwsjlm/genUpdate_srver/utils"
@@ -27,7 +27,20 @@ func InitListUpdate(ignoreFilePath, rootDir string) (err error) {
 		return err
 	}
 
-	return err
+	return WriteJsonFile(FileListJson, rootDir+"/jsonBody.json")
+}
+
+// WriteJsonFile 打开jsonBody写入json文本
+func WriteJsonFile(jsonBody map[string]FileList, path string) error {
+	b, err := json.MarshalIndent(jsonBody, "", "    ")
+	if err != nil {
+		return fmt.Errorf("failed to encode json: %w", err)
+	}
+	err = os.WriteFile(path, b, 0666)
+	if err != nil {
+		return fmt.Errorf("failed to write json file: %w", err)
+	}
+	return nil
 }
 
 // 初始化
