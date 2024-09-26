@@ -3,8 +3,8 @@ package fileutils
 import (
 	"fmt"
 	ignore "github.com/Diogenesoftoronto/go-gitignore"
+	json "github.com/bytedance/sonic"
 	"github.com/duke-git/lancet/v2/fileutil"
-	json "github.com/json-iterator/go"
 	"github.com/jwwsjlm/genUpdate_srver/auth"
 	"github.com/jwwsjlm/genUpdate_srver/db"
 	"github.com/jwwsjlm/genUpdate_srver/utils"
