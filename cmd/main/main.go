@@ -41,19 +41,21 @@ func main() {
 		ticker.Stop()
 		err := db.Close()
 		if err != nil {
-			auth.Errorf("rose 关闭失败:%s", err.Error())
+			auth.Errorf("rose 关闭失败:%v", err.Error())
 		}
 	}()
 
 	dir = dir + "/update/"
 	//s, _ := generateFileMap("update/.ignore", dir)
 	err = fileutils.InitListUpdate("update/.ignore", dir)
-	jsonData, err := json.Marshal(fileutils.FileListJson)
-	auth.Infof("文件json生成:%s", jsonData)
 	if err != nil {
-		auth.Panicf("刷新列表失败:%s", err.Error())
-
+		auth.Panicf("读取文件 %v", err)
 	}
+	jsonData, err := json.Marshal(fileutils.FileListJson)
+	if err != nil {
+		auth.Panicf("刷新列表失败:%v", err.Error())
+	}
+	auth.Infof("文件json生成:%s", jsonData)
 	go func() {
 		for {
 			select {

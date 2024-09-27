@@ -51,8 +51,8 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 		return nil, fmt.Errorf("failed to compile ignore file: %w", err)
 	}
 	fileMap := make(map[string]FileList)
-	err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
 
+	err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -60,14 +60,11 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 		if d.IsDir() {
 			return nil
 		}
-		//目录和忽略列表当中的文件不进行操作
-		if ignoreFile.MatchesPath(path) {
+		//目录和忽略列表当中的文件不进行操作 jsonBody.json不进行操作
+		if ignoreFile.MatchesPath(d.Name()) || strings.HasSuffix(path, "jsonBody.json") || strings.HasSuffix(ignoreFilePath, d.Name()) {
 			return nil
 		}
-		//忽略列表不进行操作
-		if strings.HasSuffix(ignoreFilePath, d.Name()) {
-			return nil
-		}
+
 		info, err := d.Info()
 		if err != nil {
 			return err
