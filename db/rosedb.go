@@ -1,43 +1,47 @@
 package db
 
 import (
-	"github.com/rosedblabs/rosedb/v2"
 	"time"
+
+	"github.com/rosedblabs/rosedb/v2"
 )
 
+// sdb 是 RoseDB 实例的全局变量
 var sdb *rosedb.DB
 
-func NewRoseDb(DirPath string) error {
-	var err error
+// NewRoseDb 初始化并打开一个新的 RoseDB 实例
+func NewRoseDb(dirPath string) error {
 	options := rosedb.DefaultOptions
-	options.DirPath = DirPath
+	options.DirPath = dirPath
+
+	var err error
 	sdb, err = rosedb.Open(options)
 	if err != nil {
 		return err
+	}
+	return nil
+}
 
-	}
-	return nil
+// PutWithTTL 存储带有 TTL 的键值对
+func PutWithTTL(key, value string, ttlSeconds int) error {
+	return sdb.PutWithTTL([]byte(key), []byte(value), time.Duration(ttlSeconds)*time.Second)
 }
-func PutWithTTL(k, v string, ttl int) error {
-	err := sdb.PutWithTTL([]byte(k), []byte(v), time.Duration(ttl)*time.Second)
-	return err
+
+// Get 根据键获取值
+func Get(key string) (string, error) {
+	value, err := sdb.Get([]byte(key))
+	return string(value), err
 }
-func Get(k string) (string, error) {
-	val, err := sdb.Get([]byte(k))
-	return string(val), err
+
+// Exist 检查键是否存在
+func Exist(key string) (bool, error) {
+	return sdb.Exist([]byte(key))
 }
-func Exist(key []byte) (bool, error) {
-	b, err := sdb.Exist(key)
-	return b, err
-}
+
+// Close 同步并关闭数据库
 func Close() error {
-	err := sdb.Sync()
-	if err != nil {
+	if err := sdb.Sync(); err != nil {
 		return err
 	}
-	err = sdb.Close()
-	if err != nil {
-		return err
-	}
-	return nil
+	return sdb.Close()
 }
