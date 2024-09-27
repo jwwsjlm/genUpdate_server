@@ -40,13 +40,12 @@
 
    [示例]: http://up.975135.xyz/updateList/%E6%98%9F%E6%9C%88	"星月软件"
 
-6. downloadURL为每个文件的下载地址.使用https://github.com/matoous/go-nanoid包随机生成一串id.使用https://github.com/rosedblabs/rosedb储存进db当中.生命周期为10分钟.拼接url访问实现下载
+6. downloadURL为每个文件的下载地址.使用 `github.com/matoous/go-nanoid` 包随机生成一串id.使用 `github.com/rosedblabs/rosedb` 储存进db当中.生命周期为10分钟.拼接url访问实现下载
 
-7. `.ignore` 文件为忽略列表.参考.gitignore语法使用https://github.com/Diogenesoftoronto/go-gitignore包实现正则匹配.过滤功能,注意当中的jsonBody.json 字段不要删掉否则会提交认为是软件
+7. `.ignore` 文件为忽略列表.参考.gitignore语法使用 `github.com/Diogenesoftoronto/go-gitignore` 包实现正则匹配.过滤功能,注意当中的jsonBody.json 字段不要删掉否则会提交认为是软件
 
 8. `jsonbody.json`文件,软件会5分钟同步一次update文件的列表.输出json 文本到这个文件.方便参考
 
 9. 具体的编译方法.放在了`Makefile`文件.参考编译即可
 
-   更新客户端.界面写的太丑了.没写.自己写个下载器对比下本地文件的sha256即可.拼接下url即可下载.如果这方面的能人.欢迎提交pr.
-
+更新客户端.界面写的太丑了.没写.自己写个下载器对比下本地文件的sha256即可.拼接下url即可下载.如果这方面的能人.欢迎提交pr.
