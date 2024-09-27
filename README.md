@@ -42,7 +42,7 @@
 
 6. downloadURL为每个文件的下载地址.使用 `github.com/matoous/go-nanoid` 包随机生成一串id.使用 `github.com/rosedblabs/rosedb` 储存进db当中.生命周期为10分钟.拼接url访问实现下载
 
-7. `.ignore` 文件为忽略列表.参考.gitignore语法使用 `github.com/Diogenesoftoronto/go-gitignore` 包实现正则匹配.过滤功能,注意当中的jsonBody.json 字段不要删掉否则会提交认为是软件
+7. `.ignore` 文件为忽略列表.参考.gitignore语法使用 `github.com/Diogenesoftoronto/go-gitignore` 包实现正则匹配.过滤功能.
 
 8. `jsonbody.json`文件,软件会5分钟同步一次update文件的列表.输出json 文本到这个文件.方便参考
 
