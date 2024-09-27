@@ -40,7 +40,7 @@
 
    [示例]: http://up.975135.xyz/updateList/%E6%98%9F%E6%9C%88	"星月软件"
 
-6. downloadURL为每个文件的下载地址.使用 `github.com/matoous/go-nanoid` 包随机生成一串id.使用 `github.com/rosedblabs/rosedb` 储存进db当中.生命周期为10分钟.拼接url访问实现下载
+6. downloadURL为每个文件的下载地址.使用 `github.com/matoous/go-nanoid` 包随机生成一串id.使用 `github.com/rosedblabs/rosedb` 储存进db当中.生命周期为10分钟.防止url泄露.被刷流量.拼接url访问实现下载
 
 7. `.ignore` 文件为忽略列表.参考.gitignore语法使用 `github.com/Diogenesoftoronto/go-gitignore` 包实现正则匹配.过滤功能.
 
