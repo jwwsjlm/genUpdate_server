@@ -1,11 +1,11 @@
 BINARY_NAME := Update
-CMD_PATH := .
+CMD_PATH := ./cmd/main
 
 # Go commands
 GO_BUILD:=go build
 GO_CLEAN:=go clean
 GO_TIDY:=go mod tidy
-GO_GET_U:=go get -u
+GO_GET_U:=go get -u ./...
 GOARCH_Win:=amd64
 GOOS_Win:=windows
 GOARCH_Linux:=amd64
@@ -34,6 +34,7 @@ clean:
 	@echo "Cleaning build artifacts..."
 	$(GO_CLEAN)
 	del /F /Q $(BINARY_NAME)-windows.exe
+	del /F /Q $(BINARY_NAME)-linux
 
 # Default target
 all: build-windows
