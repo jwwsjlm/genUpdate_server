@@ -22,12 +22,20 @@ const (
 func init() {
 	gin.SetMode(gin.ReleaseMode)
 }
+func feclose() {
+	if err := db.Close(); err != nil {
+		auth.Error("RoseDB 关闭失败: %w", zap.Error(err))
+	}
+	if err := auth.Logger.Sync(); err != nil {
+		auth.Error("关闭 zap log sync 出错: %s", zap.Error(err))
+	}
+}
 
 // main 主函数
 func main() {
 	// 初始化日志
 	setupLogger()
-
+	defer feclose()
 	// 获取当前工作目录
 	dir, err := os.Getwd()
 	if err != nil {
@@ -36,11 +44,6 @@ func main() {
 
 	// 初始化数据库
 	initDatabase(dir)
-	defer func() {
-		if err := db.Close(); err != nil {
-			auth.Errorf("RoseDB 关闭失败: %v", err.Error())
-		}
-	}()
 	// 设置定时器用于定期更新文件列表
 	ticker := time.NewTicker(updateInterval)
 	defer ticker.Stop()
@@ -59,18 +62,13 @@ func main() {
 // setupLogger 设置日志
 func setupLogger() {
 	auth.InitLogger(zap.InfoLevel)
-	defer func() {
-		if err := auth.Logger.Sync(); err != nil {
-			auth.Errorf("关闭 zap log sync 出错: %s", err)
-		}
-	}()
 }
 
 // initDatabase 初始化数据库
 func initDatabase(dir string) {
 	dbPath := dir + "/tmp/roseDb_basic"
 	if err := db.NewRoseDb(dbPath); err != nil {
-		auth.Panicf("RoseDB 数据库加载失败: %s", err.Error())
+		auth.Panicf("RoseDB 数据库加载失败: %v", err)
 	}
 }
 
@@ -86,7 +84,7 @@ func initUpdateList(dir string) {
 func logFileListJson() {
 	jsonData, err := json.Marshal(fileutils.FileListJson)
 	if err != nil {
-		auth.Errorf("生成文件列表 JSON 失败: %v", err.Error())
+		auth.Errorf("生成文件列表 JSON 失败: %v", err)
 	} else {
 		auth.Infof("文件 JSON 生成: %s", jsonData)
 	}
@@ -96,7 +94,7 @@ func logFileListJson() {
 func periodicUpdate(ticker *time.Ticker, dir string) {
 	for range ticker.C {
 		if err := fileutils.InitListUpdate("update/.ignore", dir); err != nil {
-			auth.Errorf("刷新列表失败: %s", err.Error())
+			auth.Errorf("刷新列表失败: %v", err)
 		}
 	}
 }
@@ -105,6 +103,6 @@ func periodicUpdate(ticker *time.Ticker, dir string) {
 func startServer() {
 	r := route.SetupRouter()
 	if err := r.Run(serverPort); err != nil {
-		auth.Panicf("Gin 启动失败: %s", err.Error())
+		auth.Panicf("Gin 启动失败: %v", err)
 	}
 }

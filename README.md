@@ -4,7 +4,9 @@
 
 示例
 
-[网站]: http://up.975135.xyz/updateList/%E6%98%9F%E6%9C%88	"网站"
+[示例网站]: http://up.975135.xyz/updateList/%E6%98%9F%E6%9C%88
+
+
 
 ```json
 {"appList":{"fileName":"星月","ReleaseNote":{"appName":"星月","description":"俺只是个测试的软件公告.并无实际功能.不要下载我噢","version":"1.0.0"},"fileList":[{"path":"星月/DllInject.exe","name":"DllInject.exe","size":2686976,"sha256":"e220d39248024bbe54ffc1737b8924711b595cfe4301a72c1483be0522b1b843","downloadURL":"/download/UPIi2w5EjQLGsWHkmsxQd"},{"path":"星月/ReleaseNote.txt","name":"ReleaseNote.txt","size":139,"sha256":"7c0eab3edb699453d2327865945edb6a0ce13a8b2bc61e9768f8fc0679ca0cdd","downloadURL":"/download/vznI2VmWM7MpuVL8ivldx"},{"path":"星月/data/client.dll","name":"client.dll","size":7253584,"sha256":"84986b784d7a263da991d3be04bbafa25e1669453b7b7ad6efdd0abc8547e9af","downloadURL":"/download/QV1xBsdaEOqywTUB4BVHk"},{"path":"星月/data/sql.txt","name":"sql.txt","size":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","downloadURL":"/download/KlPCceGgXCH_TmLcChwwi"},{"path":"星月/qqwry - 副本.exe","name":"qqwry - 副本.exe","size":25272339,"sha256":"830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3","downloadURL":"/download/7hwQB8IZVMDfduCJ4tXBd"},{"path":"星月/qqwry.dat","name":"qqwry.dat","size":25272339,"sha256":"830722bcb86593272040534f993d81bb426096c6adf2e46312e44c31a11745e3","downloadURL":"/download/M_zpjtCu_G8ec39jwohxl"}]},"ret":"ok"}
@@ -18,7 +20,7 @@
 
 2. update文件夹为软件目录.当中的每个子目录为单独的软件版本
 
-3. 拼接url.比如上传的例子当中.update下的星月软件.
+3. 拼接url.比如上面的例子当中.update下的星月软件.
 
 4. 构建自己的公告.在软件目录当中新建ReleaseNote.txt文件.按照例子格式
 
