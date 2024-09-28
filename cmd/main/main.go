@@ -6,10 +6,10 @@ import (
 
 	json "github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
-	"github.com/jwwsjlm/genUpdate_srver/auth"
-	"github.com/jwwsjlm/genUpdate_srver/db"
-	"github.com/jwwsjlm/genUpdate_srver/fileutils"
-	"github.com/jwwsjlm/genUpdate_srver/route"
+	"github.com/jwwsjlm/genUpdate_server/auth"
+	"github.com/jwwsjlm/genUpdate_server/db"
+	"github.com/jwwsjlm/genUpdate_server/fileutils"
+	"github.com/jwwsjlm/genUpdate_server/route"
 	"go.uber.org/zap"
 )
 

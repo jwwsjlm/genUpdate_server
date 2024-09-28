@@ -1,4 +1,4 @@
-module github.com/jwwsjlm/genUpdate_srver
+module github.com/jwwsjlm/genUpdate_server
 
 go 1.23.1
 

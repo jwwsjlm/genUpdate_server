@@ -7,9 +7,9 @@ import (
 
 	"github.com/duke-git/lancet/v2/fileutil"
 	"github.com/gin-gonic/gin"
-	"github.com/jwwsjlm/genUpdate_srver/auth"
-	"github.com/jwwsjlm/genUpdate_srver/db"
-	"github.com/jwwsjlm/genUpdate_srver/fileutils"
+	"github.com/jwwsjlm/genUpdate_server/auth"
+	"github.com/jwwsjlm/genUpdate_server/db"
+	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"go.uber.org/zap"
 )
 
