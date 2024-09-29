@@ -50,4 +50,6 @@
 
 9. 具体的编译方法.放在了`Makefile`文件.参考编译即可
 
+   示例客户端:https://github.com/jwwsjlm/genUpdate_client
+
 更新客户端.界面写的太丑了.没写.自己写个下载器对比下本地文件的sha256即可.拼接下url即可下载.如果这方面的能人.欢迎提交pr.
