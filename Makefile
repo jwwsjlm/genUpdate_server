@@ -1,8 +1,8 @@
-BINARY_NAME := Update
+BINARY_NAME := ./build/Update
 CMD_PATH := ./cmd/main
 
 # Go commands
-GO := go
+GO = go
 GOBUILD := $(GO) build
 GOCLEAN := $(GO) clean
 GOMOD := $(GO) mod
@@ -20,11 +20,11 @@ GOARCH_LINUX := amd64
 
 .PHONY: all build-windows build-linux install clean help get-u
 
-all: build-windows
+all: build-windows build-linux
 
 build-windows:
 	@echo Building application for Windows...
-	(GOBUILD) -tags=$(TAGS) -ldflags="$(LDFLAGS)" -o $(BINARY_NAME)-windows.exe $(CMD_PATH)
+	set GOOS=$(GOOS_WINDOWS)& set GOARCH=$(GOARCH_WINDOWS)& $(GOBUILD) -tags=$(TAGS) -ldflags="$(LDFLAGS)" -o $(BINARY_NAME)-windows.exe $(CMD_PATH)
 
 build-linux:
 	@echo Building application for Linux...
@@ -33,6 +33,10 @@ build-linux:
 install:
 	@echo Installing dependencies...
 	$(GOMOD) tidy
+upx: build-windows build-linux
+	@echo "Compressing with UPX..."
+	upx --best --lzma $(BINARY_NAME)-windows.exe
+	upx --best --lzma $(BINARY_NAME)-linux
 
 clean:
 	@echo Cleaning build artifacts...

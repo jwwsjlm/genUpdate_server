@@ -200,3 +200,4 @@ fabric.properties
 /log/*.log
 /tmp
 /update/*.json
+/build

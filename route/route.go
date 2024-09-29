@@ -32,7 +32,7 @@ func getUpdateList(c *gin.Context) {
 	if fileInfo, exists := fileutils.FileListJson[filename]; exists {
 		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": fileInfo})
 	} else {
-		c.JSON(http.StatusNotFound, gin.H{"error": "软件名不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "软件名不存在"})
 	}
 }
 
