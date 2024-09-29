@@ -88,6 +88,7 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, ignoreFilePath, path, name string) bool {
 	return ignoreFile.MatchesPath(name) ||
 		strings.HasSuffix(path, "jsonBody.json") ||
+		strings.HasSuffix(path, "ReleaseNote.txt") ||
 		strings.HasSuffix(ignoreFilePath, name)
 }
 
