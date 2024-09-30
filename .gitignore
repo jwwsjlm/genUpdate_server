@@ -201,3 +201,4 @@ fabric.properties
 /tmp
 /update/*.json
 /build
+/genUpdate_server.7z

@@ -35,8 +35,8 @@ install:
 	$(GOMOD) tidy
 upx: build-windows build-linux
 	@echo "Compressing with UPX..."
-	upx --best --lzma $(BINARY_NAME)-windows.exe
-	upx --best --lzma $(BINARY_NAME)-linux
+	upx --best --lzma -o $(BINARY_NAME)-windows-upx.exe $(BINARY_NAME)-windows.exe || { echo "Windows UPX compression failed"; exit 1; }
+	upx --best --lzma -o $(BINARY_NAME)-linux-upx $(BINARY_NAME)-linux || { echo "Linux UPX compression failed"; exit 1; }
 
 clean:
 	@echo Cleaning build artifacts...

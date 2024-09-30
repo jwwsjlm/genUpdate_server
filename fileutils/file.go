@@ -62,7 +62,7 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 		}
 
 		// 忽略目录和应该被忽略的文件
-		if d.IsDir() || shouldIgnoreFile(ignoreFile, ignoreFilePath, path, d.Name()) {
+		if d.IsDir() || shouldIgnoreFile(ignoreFile, path, d.Name()) {
 			return nil
 		}
 
@@ -85,11 +85,11 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 }
 
 // shouldIgnoreFile 判断是否应该忽略文件
-func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, ignoreFilePath, path, name string) bool {
+func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, path, name string) bool {
 	return ignoreFile.MatchesPath(name) ||
 		strings.HasSuffix(path, "jsonBody.json") ||
 		strings.HasSuffix(path, "ReleaseNote.txt") ||
-		strings.HasSuffix(ignoreFilePath, name)
+		strings.HasSuffix(path, ".ignore")
 }
 
 // processFile 处理单个文件，生成文件信息
