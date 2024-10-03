@@ -58,7 +58,7 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 	// 遍历目录
 	err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return fmt.Errorf("遍历路径 %v 时出错: %w", path, err)
 		}
 
 		// 忽略目录和应该被忽略的文件
@@ -69,7 +69,7 @@ func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, er
 		// 处理文件
 		fileInfo, err := processFile(rootDir, path, d)
 		if err != nil {
-			return err
+			return fmt.Errorf("处理文件 %v 时出错: %w", path, err)
 		}
 
 		// 更新文件映射
@@ -160,6 +160,7 @@ func updateFileMap(fileMap map[string]FileList, rootDir string, fileInfo FileInf
 // initializeFileList 初始化文件列表，包括读取 ReleaseNote.txt
 func initializeFileList(rootDir, dir string) FileList {
 	dirNote := filepath.Join(rootDir, dir, "ReleaseNote.txt")
+
 	note := ReleaseNote{
 		AppName:     dir,
 		Description: "null",

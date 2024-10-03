@@ -44,7 +44,7 @@ clean:
 	@if exist $(BINARY_NAME)-windows.exe del /F /Q $(BINARY_NAME)-windows.exe
 	@if exist $(BINARY_NAME)-linux del /F /Q $(BINARY_NAME)-linux
 
-get-u:
+get:
 	@echo Updating dependencies...
 	$(GOGET) -u ./...
 
@@ -54,5 +54,5 @@ help:
 	@echo   make build-linux   - Build application for Linux
 	@echo   make install       - Install dependencies
 	@echo   make clean         - Clean build artifacts
-	@echo   make get-u         - Update dependencies
+	@echo   make get         - Update dependencies
 	@echo   make help          - Display this help message
