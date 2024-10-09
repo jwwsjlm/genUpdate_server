@@ -29,8 +29,8 @@ func SetupRouter() *gin.Engine {
 // getUpdateList 处理获取更新列表的请求
 func getUpdateList(c *gin.Context) {
 	filename := c.Param("filename")
-	if fileInfo, ok := fileutils.FileListJson[filename]; ok {
-		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": fileInfo})
+	if f, ok := fileutils.GetList(filename); ok {
+		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": f})
 	} else {
 		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "软件名不存在"})
 	}

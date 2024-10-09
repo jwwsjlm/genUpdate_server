@@ -15,24 +15,38 @@ import (
 	"sync"
 )
 
-var FileListJson = make(map[string]FileList)
-var mu sync.Mutex
+var listJson = make(map[string]FileList)
 
+var mu sync.RWMutex
+
+func GetList(fn string) (FileList, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	fileInfo, ok := listJson[fn]
+	return fileInfo, ok
+
+}
+func GetJsonText() (string, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+	jsonData, err := json.Marshal(listJson)
+	return string(jsonData), err
+}
 func InitListUpdate(ignoreFilePath, rootDir string) (err error) {
 	mu.Lock()
 	defer mu.Unlock()
-	//FileListJson, err = generateFileLists3(ignoreFilePath, rootDir)
-	FileListJson, err = generateFileLists3(ignoreFilePath, rootDir)
+	//listJson, err = generateFileLists3(ignoreFilePath, rootDir)
+	listJson, err = generateFileLists3(ignoreFilePath, rootDir)
 	if err != nil {
 		return fmt.Errorf("failed to generate file lists: %w", err)
 	}
 
-	return WriteJsonFile(FileListJson, rootDir+"/jsonBody.json")
+	return WriteJsonFile(rootDir + "/jsonBody.json")
 }
 
 // WriteJsonFile 打开jsonBody写入json文本
-func WriteJsonFile(jsonBody map[string]FileList, path string) error {
-	b, err := json.MarshalIndent(jsonBody, "", "    ")
+func WriteJsonFile(path string) error {
+	b, err := json.MarshalIndent(listJson, "", "    ")
 	if err != nil {
 		return fmt.Errorf("failed to encode json: %w", err)
 	}

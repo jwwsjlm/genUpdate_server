@@ -4,7 +4,6 @@ import (
 	"os"
 	"time"
 
-	json "github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/jwwsjlm/genUpdate_server/auth"
 	"github.com/jwwsjlm/genUpdate_server/db"
@@ -82,7 +81,7 @@ func initUpdateList(dir string) {
 
 // logFileListJson 记录文件列表 JSON
 func logFileListJson() {
-	jsonData, err := json.Marshal(fileutils.FileListJson)
+	jsonData, err := fileutils.GetJsonText()
 	if err != nil {
 		auth.Errorf("生成文件列表 JSON 失败: %v", err)
 	} else {
