@@ -6,12 +6,15 @@ type FileInfo struct {
 	Size        int64  `json:"size"`
 	Sha256      string `json:"sha256"`
 	DownloadURL string `json:"downloadURL"`
+	ModTime     string `json:"modTime,omitempty"`
 }
+
 type FileList struct {
 	FileName string      `json:"fileName"`
 	Note     ReleaseNote `json:"ReleaseNote"`
 	Files    []FileInfo  `json:"fileList"`
 }
+
 type ReleaseNote struct {
 	AppName     string `json:"appName"`
 	Description string `json:"description"`

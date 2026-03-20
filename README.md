@@ -13,8 +13,9 @@
 - 🔄 **自动版本同步** - 客户端自动检测并更新
 - 📂 **多软件支持** - 单服务端管理多软件
 - 🔐 **SHA256 校验** - 确保文件完整性
-- 🔗 **临时链接** - 10 分钟有效期，防止盗链
+- ⚡ **稳定下载链接** - 直接按相对路径下载，不依赖临时随机 ID
 - 📊 **实时公告** - 支持版本更新说明
+- 🚀 **扫描缓存** - 未变化文件不会重复计算 SHA256
 
 ---
 
@@ -25,16 +26,16 @@
 ```bash
 git clone https://github.com/jwwsjlm/genUpdate_server.git
 cd genUpdate_server
-go build -o genUpdate_server cmd/main.go
+go build -o genUpdate_server ./cmd/main
 ./genUpdate_server
 ```
 
-访问：http://localhost:8080
+默认访问地址：`http://localhost:8090`
 
 ### Docker 部署
 
 ```bash
-docker run -d -p 8080:8080 -v ./update:/app/update jwwsjlm/genUpdate_server:latest
+docker run -d -p 8090:8090 -v ./update:/app/update jwwsjlm/genUpdate_server:latest
 ```
 
 ---
@@ -44,18 +45,23 @@ docker run -d -p 8080:8080 -v ./update:/app/update jwwsjlm/genUpdate_server:late
 ### 获取软件版本
 
 ```bash
-curl http://localhost:8080/updateList/软件名
+curl http://localhost:8090/updateList/软件名
 ```
 
 ### 下载文件
 
 ```bash
-curl http://localhost:8080/download/文件 ID
+curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 ```
 
 ---
 
 ## ⚙️ 配置
+
+### 环境变量
+
+- `GENUPDATE_PORT`：监听端口，默认 `8090`
+- `GENUPDATE_SCAN_INTERVAL_SECONDS`：扫描间隔秒数，默认 `300`
 
 ### ReleaseNote.txt
 
@@ -71,10 +77,24 @@ curl http://localhost:8080/download/文件 ID
 
 ---
 
+## 📂 目录结构示例
+
+```text
+update/
+├── .ignore
+├── 星月/
+│   ├── ReleaseNote.txt
+│   └── qqwry.dat
+└── 鬼泣/
+    ├── ReleaseNote.txt
+    └── demo.exe
+```
+
+---
+
 ## 🙏 致谢
 
-- [go-nanoid](https://github.com/matoous/go-nanoid)
-- [rosedb](https://github.com/rosedblabs/rosedb)
+- [go-gitignore](https://github.com/matoous/go-gitignore)
 
 相关项目：[genUpdate_client](https://github.com/jwwsjlm/genUpdate_client)
 

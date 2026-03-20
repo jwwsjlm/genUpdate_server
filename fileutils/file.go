@@ -2,189 +2,215 @@ package fileutils
 
 import (
 	"fmt"
-	ignore "github.com/Diogenesoftoronto/go-gitignore"
-	json "github.com/bytedance/sonic"
-	"github.com/duke-git/lancet/v2/fileutil"
-	"github.com/jwwsjlm/genUpdate_server/db"
-	"github.com/jwwsjlm/genUpdate_server/utils"
-	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/rs/xid"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	"encoding/json"
+
+	ignore "github.com/Diogenesoftoronto/go-gitignore"
+	"github.com/duke-git/lancet/v2/fileutil"
+	"github.com/jwwsjlm/genUpdate_server/utils"
 )
 
-var listJson = make(map[string]FileList)
+var (
+	listJSON = make(map[string]FileList)
+	manifest = manifestCache{Files: make(map[string]cachedFileMeta)}
+	mu       sync.RWMutex
+)
 
-var mu sync.RWMutex
+type cachedFileMeta struct {
+	Size    int64  `json:"size"`
+	ModTime int64  `json:"modTime"`
+	SHA256  string `json:"sha256"`
+}
+
+type manifestCache struct {
+	Files map[string]cachedFileMeta `json:"files"`
+}
 
 func GetList(fn string) (FileList, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
-	fileInfo, ok := listJson[fn]
+	fileInfo, ok := listJSON[fn]
 	return fileInfo, ok
-
 }
-func GetJsonText() (string, error) {
+
+func GetJSONText() (string, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	jsonData, err := json.Marshal(listJson)
+	jsonData, err := json.Marshal(listJSON)
 	return string(jsonData), err
 }
-func InitListUpdate(ignoreFilePath, rootDir string) (err error) {
-	mu.Lock()
-	defer mu.Unlock()
-	//listJson, err = generateFileLists3(ignoreFilePath, rootDir)
-	listJson, err = generateFileLists3(ignoreFilePath, rootDir)
+
+func InitListUpdate(ignoreFilePath, rootDir string) error {
+	cachePath := filepath.Join(rootDir, "manifest-cache.json")
+	cache, err := loadManifestCache(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to load manifest cache: %w", err)
+	}
+
+	newList, newCache, err := generateFileLists(ignoreFilePath, rootDir, cache)
 	if err != nil {
 		return fmt.Errorf("failed to generate file lists: %w", err)
 	}
 
-	return WriteJsonFile(rootDir + "/jsonBody.json")
+	if err := saveManifestCache(cachePath, newCache); err != nil {
+		return fmt.Errorf("failed to save manifest cache: %w", err)
+	}
+	if err := writeJSONFile(filepath.Join(rootDir, "jsonBody.json"), newList); err != nil {
+		return err
+	}
+
+	mu.Lock()
+	listJSON = newList
+	manifest = newCache
+	mu.Unlock()
+	return nil
 }
 
-// WriteJsonFile 打开jsonBody写入json文本
-func WriteJsonFile(path string) error {
-	b, err := json.MarshalIndent(listJson, "", "    ")
+func writeJSONFile(path string, list map[string]FileList) error {
+	b, err := json.MarshalIndent(list, "", "    ")
 	if err != nil {
 		return fmt.Errorf("failed to encode json: %w", err)
 	}
-	err = os.WriteFile(path, b, 0666)
-	if err != nil {
+	if err := os.WriteFile(path, b, 0o666); err != nil {
 		return fmt.Errorf("failed to write json file: %w", err)
 	}
 	return nil
 }
 
-// 初始化
-// generateFileLists3 生成文件列表，忽略指定文件，并组织文件信息
-func generateFileLists3(ignoreFilePath, rootDir string) (map[string]FileList, error) {
-	// 编译忽略文件
-	ignoreFile, err := ignore.CompileIgnoreFile(ignoreFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("编译忽略文件失败: %w", err)
+func loadManifestCache(path string) (manifestCache, error) {
+	cache := manifestCache{Files: make(map[string]cachedFileMeta)}
+	if !fileutil.IsExist(path) {
+		return cache, nil
 	}
 
-	// 初始化文件映射
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return cache, err
+	}
+	if len(b) == 0 {
+		return cache, nil
+	}
+	if err := json.Unmarshal(b, &cache); err != nil {
+		return cache, err
+	}
+	if cache.Files == nil {
+		cache.Files = make(map[string]cachedFileMeta)
+	}
+	return cache, nil
+}
+
+func saveManifestCache(path string, cache manifestCache) error {
+	b, err := json.MarshalIndent(cache, "", "    ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o666)
+}
+
+func generateFileLists(ignoreFilePath, rootDir string, cache manifestCache) (map[string]FileList, manifestCache, error) {
+	ignoreFile, err := ignore.CompileIgnoreFile(ignoreFilePath)
+	if err != nil {
+		return nil, manifestCache{}, fmt.Errorf("编译忽略文件失败: %w", err)
+	}
+
 	fileMap := make(map[string]FileList)
+	newCache := manifestCache{Files: make(map[string]cachedFileMeta)}
 
-	// 遍历目录
-	err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("遍历路径 %v 时出错: %w", path, err)
+	err = filepath.WalkDir(rootDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("遍历路径 %v 时出错: %w", path, walkErr)
 		}
-
-		// 忽略目录和应该被忽略的文件
 		if d.IsDir() || shouldIgnoreFile(ignoreFile, path, d.Name()) {
 			return nil
 		}
 
-		// 处理文件
-		fileInfo, err := processFile(rootDir, path, d)
+		fileInfo, cacheMeta, err := processFile(rootDir, path, d, cache)
 		if err != nil {
 			return fmt.Errorf("处理文件 %v 时出错: %w", path, err)
 		}
 
-		// 更新文件映射
+		newCache.Files[fileInfo.Path] = cacheMeta
 		updateFileMap(fileMap, rootDir, fileInfo)
 		return nil
 	})
-
 	if err != nil {
-		return nil, fmt.Errorf("遍历路径 %v 时出错: %w", rootDir, err)
+		return nil, manifestCache{}, fmt.Errorf("遍历路径 %v 时出错: %w", rootDir, err)
 	}
 
-	return fileMap, nil
+	return fileMap, newCache, nil
 }
 
-// shouldIgnoreFile 判断是否应该忽略文件
 func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, path, name string) bool {
 	return ignoreFile.MatchesPath(name) ||
 		strings.HasSuffix(path, "jsonBody.json") ||
+		strings.HasSuffix(path, "manifest-cache.json") ||
 		strings.HasSuffix(path, "ReleaseNote.txt") ||
 		strings.HasSuffix(path, ".ignore")
 }
 
-// processFile 处理单个文件，生成文件信息
-func processFile(rootDir, path string, d os.DirEntry) (FileInfo, error) {
-	// 获取文件信息
+func processFile(rootDir, path string, d os.DirEntry, cache manifestCache) (FileInfo, cachedFileMeta, error) {
 	info, err := d.Info()
 	if err != nil {
-		return FileInfo{}, fmt.Errorf("获取文件信息失败: %w", err)
+		return FileInfo{}, cachedFileMeta{}, fmt.Errorf("获取文件信息失败: %w", err)
 	}
 
-	// 计算文件的 SHA256 哈希
-	sha256, err := fileutil.Sha(path, 256)
-	if err != nil {
-		return FileInfo{}, fmt.Errorf("计算文件哈希失败: %w", err)
-	}
-
-	// 计算相对路径
 	relativePath, err := filepath.Rel(rootDir, path)
 	if err != nil {
-		return FileInfo{}, fmt.Errorf("计算相对路径失败: %w", err)
+		return FileInfo{}, cachedFileMeta{}, fmt.Errorf("计算相对路径失败: %w", err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+
+	meta := cachedFileMeta{
+		Size:    info.Size(),
+		ModTime: info.ModTime().UnixNano(),
 	}
 
-	// 生成唯一标识符
-	guid, err := generateGUID()
-	if err != nil {
-		return FileInfo{}, fmt.Errorf("生成 GUID 失败: %w", err)
+	if old, ok := cache.Files[relativePath]; ok && old.Size == meta.Size && old.ModTime == meta.ModTime {
+		meta.SHA256 = old.SHA256
+	} else {
+		meta.SHA256, err = fileutil.Sha(path, 256)
+		if err != nil {
+			return FileInfo{}, cachedFileMeta{}, fmt.Errorf("计算文件哈希失败: %w", err)
+		}
 	}
 
-	// 将路径信息存储到数据库，设置 TTL
-	if err := db.PutWithTTL(guid, relativePath, 600); err != nil {
-		return FileInfo{}, fmt.Errorf("存储文件路径失败: %w", err)
-	}
-
-	// 返回文件信息
 	return FileInfo{
 		Path:        relativePath,
 		Name:        info.Name(),
 		Size:        info.Size(),
-		Sha256:      sha256,
-		DownloadURL: "/download/" + guid,
-	}, nil
+		Sha256:      meta.SHA256,
+		DownloadURL: "/download/" + relativePath,
+		ModTime:     info.ModTime().UTC().Format(time.RFC3339),
+	}, meta, nil
 }
 
-// generateGUID 生成全局唯一标识符
-func generateGUID() (string, error) {
-	guid, err := gonanoid.New()
-	if err != nil {
-		// 如果 gonanoid 失败，使用 xid 作为备选
-		return xid.New().String(), nil
-	}
-	return guid, nil
-}
-
-// updateFileMap 更新文件映射
 func updateFileMap(fileMap map[string]FileList, rootDir string, fileInfo FileInfo) {
 	dir := utils.GetMainDirectory(fileInfo.Path)
 	if _, ok := fileMap[dir]; !ok {
-		// 如果目录不存在于映射中，初始化一个新的 FileList
 		fileMap[dir] = initializeFileList(rootDir, dir)
 	}
 
-	// 将文件信息添加到对应的 FileList
 	fileList := fileMap[dir]
 	fileList.Files = append(fileList.Files, fileInfo)
 	fileMap[dir] = fileList
 }
 
-// initializeFileList 初始化文件列表，包括读取 ReleaseNote.txt
 func initializeFileList(rootDir, dir string) FileList {
 	dirNote := filepath.Join(rootDir, dir, "ReleaseNote.txt")
-
 	note := ReleaseNote{
 		AppName:     dir,
 		Description: "null",
 		Version:     "1.0.0",
 	}
 
-	// 如果存在 ReleaseNote.txt，则读取其内容
 	if fileutil.IsExist(dirNote) {
 		if file, err := os.ReadFile(dirNote); err == nil {
-			json.Unmarshal(file, &note) // 忽略错误，因为我们有默认值
+			_ = json.Unmarshal(file, &note)
 		}
 	}
 
