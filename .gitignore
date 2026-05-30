@@ -203,3 +203,4 @@ fabric.properties
 /build
 /dist
 /genUpdate_server.7z
+/config.json

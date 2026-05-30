@@ -1,0 +1,13 @@
+{
+  "port": "8090",
+  "updateDir": "update",
+  "scanIntervalSeconds": 300,
+  "readTimeoutSeconds": 15,
+  "writeTimeoutSeconds": 600,
+  "idleTimeoutSeconds": 60,
+  "maxConcurrentDownloads": 64,
+  "appTokens": {
+    "cc": "replace-with-generated-token",
+    "bb": "replace-with-generated-token"
+  }
+}

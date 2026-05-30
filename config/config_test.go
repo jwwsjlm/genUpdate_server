@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -73,6 +74,8 @@ func TestGetAppTokensFromEnv(t *testing.T) {
 func TestLoad(t *testing.T) {
 	workDir := t.TempDir()
 
+	t.Setenv("GENUPDATE_CONFIG", "")
+	t.Setenv("GENUPDATE_PORT", "")
 	t.Setenv("GENUPDATE_UPDATE_DIR", "")
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "5")
 	t.Setenv("GENUPDATE_APP_TOKENS", "cc=token-cc")
@@ -98,5 +101,91 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.UpdateDir != customDir {
 		t.Fatalf("custom update dir = %q, want %q", cfg.UpdateDir, customDir)
+	}
+}
+
+func TestLoadFromDefaultConfigFile(t *testing.T) {
+	workDir := t.TempDir()
+	writeConfigFile(t, filepath.Join(workDir, DefaultConfigFileName), `{
+		"port": "9100",
+		"updateDir": "updates",
+		"scanIntervalSeconds": 42,
+		"readTimeoutSeconds": 3,
+		"writeTimeoutSeconds": 4,
+		"idleTimeoutSeconds": 5,
+		"maxConcurrentDownloads": 6,
+		"appTokens": {
+			"cc": "file-token"
+		}
+	}`)
+	t.Setenv("GENUPDATE_CONFIG", "")
+	t.Setenv("GENUPDATE_PORT", "")
+	t.Setenv("GENUPDATE_UPDATE_DIR", "")
+	t.Setenv("GENUPDATE_APP_TOKENS", "")
+
+	cfg, err := Load(workDir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Port != ":9100" {
+		t.Fatalf("port = %q, want :9100", cfg.Port)
+	}
+	if cfg.UpdateDir != filepath.Join(workDir, "updates") {
+		t.Fatalf("update dir = %q, want %q", cfg.UpdateDir, filepath.Join(workDir, "updates"))
+	}
+	if cfg.ScanInterval != 42*time.Second || cfg.ReadTimeout != 3*time.Second || cfg.WriteTimeout != 4*time.Second || cfg.IdleTimeout != 5*time.Second {
+		t.Fatalf("durations = scan %s read %s write %s idle %s", cfg.ScanInterval, cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
+	}
+	if cfg.MaxConcurrentDownloads != 6 {
+		t.Fatalf("max concurrent downloads = %d, want 6", cfg.MaxConcurrentDownloads)
+	}
+	if cfg.AppTokens["cc"] != "file-token" {
+		t.Fatalf("app tokens = %#v", cfg.AppTokens)
+	}
+}
+
+func TestLoadEnvOverridesConfigFile(t *testing.T) {
+	workDir := t.TempDir()
+	configPath := filepath.Join(workDir, "custom-config.json")
+	writeConfigFile(t, configPath, `{
+		"port": "9100",
+		"maxConcurrentDownloads": 6,
+		"appTokens": {
+			"cc": "file-token"
+		}
+	}`)
+	t.Setenv("GENUPDATE_CONFIG", configPath)
+	t.Setenv("GENUPDATE_PORT", "9200")
+	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "9")
+	t.Setenv("GENUPDATE_APP_TOKENS", "cc=env-token")
+
+	cfg, err := Load(workDir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Port != ":9200" {
+		t.Fatalf("port = %q, want :9200", cfg.Port)
+	}
+	if cfg.MaxConcurrentDownloads != 9 {
+		t.Fatalf("max concurrent downloads = %d, want 9", cfg.MaxConcurrentDownloads)
+	}
+	if cfg.AppTokens["cc"] != "env-token" {
+		t.Fatalf("app tokens = %#v", cfg.AppTokens)
+	}
+}
+
+func TestLoadExplicitMissingConfigFile(t *testing.T) {
+	workDir := t.TempDir()
+	t.Setenv("GENUPDATE_CONFIG", filepath.Join(workDir, "missing.json"))
+
+	if _, err := Load(workDir); err == nil {
+		t.Fatalf("Load() error = nil, want error")
+	}
+}
+
+func writeConfigFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
 	}
 }

@@ -157,10 +157,35 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 
 ## 配置
 
-通过环境变量配置服务：
+服务启动时会先读取默认配置，再读取本地配置文件，最后应用环境变量覆盖。优先级为：默认值 < `config.json` < 环境变量。
+
+默认会尝试读取当前工作目录下的 `config.json`；也可以通过 `GENUPDATE_CONFIG` 指定配置文件路径。仓库内提供了 `config.example.json`，复制后改名为 `config.json` 即可使用。
+
+### config.json
+
+```json
+{
+  "port": "8090",
+  "updateDir": "update",
+  "scanIntervalSeconds": 300,
+  "readTimeoutSeconds": 15,
+  "writeTimeoutSeconds": 600,
+  "idleTimeoutSeconds": 60,
+  "maxConcurrentDownloads": 64,
+  "appTokens": {
+    "cc": "cc-token",
+    "bb": "bb-token"
+  }
+}
+```
+
+`updateDir` 使用相对路径时，会相对于服务工作目录解析。
+
+### 环境变量
 
 | 变量名 | 默认值 | 说明 |
 | --- | --- | --- |
+| `GENUPDATE_CONFIG` | 当前工作目录下的 `config.json` | 本地配置文件路径 |
 | `GENUPDATE_PORT` | `8090` | HTTP 监听端口，支持 `8090` 或 `:8090` |
 | `GENUPDATE_UPDATE_DIR` | 当前工作目录下的 `update` | 更新文件根目录 |
 | `GENUPDATE_SCAN_INTERVAL_SECONDS` | `300` | 更新目录扫描间隔，单位秒 |
