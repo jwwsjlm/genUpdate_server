@@ -1,51 +1,121 @@
 # 通用更新服务端
 
-📦 自动更新服务端，支持多软件版本管理和 SHA256 校验。
+一个轻量的自动更新服务端，用于集中管理多个软件的版本清单和更新文件。服务会扫描更新目录，生成带 SHA256 校验值的文件清单，并提供清单查询、文件下载、健康检查和构建版本信息接口。
 
 [![GitHub Release](https://img.shields.io/github/v/release/jwwsjlm/genUpdate_server)](https://github.com/jwwsjlm/genUpdate_server/releases)
 [![License](https://img.shields.io/github/license/jwwsjlm/genUpdate_server)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-blue)](https://golang.org)
 
 ---
 
-## ✨ 功能特性
+## 功能介绍
 
-- 🔄 **自动版本同步** - 客户端自动检测并更新
-- 📂 **多软件支持** - 单服务端管理多软件
-- 🔐 **SHA256 校验** - 确保文件完整性
-- ⚡ **稳定下载链接** - 直接按相对路径下载，不依赖临时随机 ID
-- 📊 **实时公告** - 支持版本更新说明
-- 🚀 **扫描缓存** - 未变化文件不会重复计算 SHA256
+- 多软件管理：`update` 目录下每个一级子目录对应一个软件，单个服务即可维护多个软件的更新清单。
+- 自动清单生成：启动时扫描更新目录，并按配置的间隔定时刷新清单。
+- SHA256 校验：为每个更新文件生成 SHA256，客户端可用它校验下载文件完整性。
+- 扫描缓存：通过 `manifest-cache.json` 缓存文件大小、修改时间和 SHA256，未变化文件不会重复计算哈希。
+- 稳定下载地址：清单中的 `downloadURL` 使用文件相对路径，例如 `/download/星月/qqwry.dat`。
+- 断点续传支持：下载接口支持 `Range` 请求、`HEAD` 请求、`Accept-Ranges` 和 `ETag`。
+- 并发下载限制：可通过环境变量限制同时下载数，避免单机资源被打满。
+- 忽略规则：支持 `update/.ignore`，并自动跳过 `ReleaseNote.txt`、`.ignore`、`jsonBody.json`、`manifest-cache.json` 等内部文件。
+- 版本公告：每个软件目录可放置 `ReleaseNote.txt`，用于返回应用名、版本号和更新说明。
+- 运维接口：提供 `/healthz` 健康检查和 `/version` 构建版本信息接口。
+- Docker 部署：内置多阶段 Dockerfile，可直接挂载更新目录运行。
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
-### 源码编译
+### 源码运行
 
 ```bash
 git clone https://github.com/jwwsjlm/genUpdate_server.git
 cd genUpdate_server
-go build -o genUpdate_server ./cmd/main
-./genUpdate_server
+go run ./cmd/main
 ```
 
 默认访问地址：`http://localhost:8090`
 
+### 编译
+
+```bash
+go build -o genUpdate_server ./cmd/main
+./genUpdate_server
+```
+
+也可以使用 Makefile 交叉编译：
+
+```bash
+make build-windows
+make build-linux
+```
+
 ### Docker 部署
 
 ```bash
-docker run -d -p 8090:8090 -v ./update:/app/update jwwsjlm/genUpdate_server:latest
+docker run -d \
+  -p 8090:8090 \
+  -v ./update:/app/update \
+  jwwsjlm/genUpdate_server:latest
 ```
 
 ---
 
-## 📖 API 使用
+## API 使用
 
-### 获取软件版本
+### 健康检查
 
 ```bash
-curl http://localhost:8090/updateList/软件名
+curl http://localhost:8090/healthz
+```
+
+返回示例：
+
+```json
+{
+  "ret": "ok",
+  "status": "healthy"
+}
+```
+
+### 查看服务版本
+
+```bash
+curl http://localhost:8090/version
+```
+
+返回内容包含构建版本、提交号、构建时间、当前清单大小和清单缓存时间。
+
+### 获取软件更新清单
+
+```bash
+curl http://localhost:8090/updateList/星月
+```
+
+返回示例：
+
+```json
+{
+  "ret": "ok",
+  "appList": {
+    "fileName": "星月",
+    "ReleaseNote": {
+      "appName": "星月",
+      "description": "更新说明",
+      "version": "1.0.0"
+    },
+    "fileList": [
+      {
+        "path": "星月/qqwry.dat",
+        "name": "qqwry.dat",
+        "size": 12345,
+        "sha256": "...",
+        "downloadURL": "/download/星月/qqwry.dat",
+        "modTime": "2026-05-30T00:00:00Z"
+      }
+    ]
+  }
+}
 ```
 
 ### 下载文件
@@ -54,18 +124,46 @@ curl http://localhost:8090/updateList/软件名
 curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 ```
 
+下载接口会限制路径穿越，并只允许访问更新目录内的文件。
+
 ---
 
-## ⚙️ 配置
+## 配置
 
-### 环境变量
+通过环境变量配置服务：
 
-- `GENUPDATE_PORT`：监听端口，默认 `8090`
-- `GENUPDATE_SCAN_INTERVAL_SECONDS`：扫描间隔秒数，默认 `300`
+| 变量名 | 默认值 | 说明 |
+| --- | --- | --- |
+| `GENUPDATE_PORT` | `8090` | HTTP 监听端口，支持 `8090` 或 `:8090` |
+| `GENUPDATE_UPDATE_DIR` | 当前工作目录下的 `update` | 更新文件根目录 |
+| `GENUPDATE_SCAN_INTERVAL_SECONDS` | `300` | 更新目录扫描间隔，单位秒 |
+| `GENUPDATE_READ_TIMEOUT_SECONDS` | `15` | HTTP 读取超时，单位秒 |
+| `GENUPDATE_WRITE_TIMEOUT_SECONDS` | `600` | HTTP 写入超时，单位秒 |
+| `GENUPDATE_IDLE_TIMEOUT_SECONDS` | `60` | HTTP 空闲连接超时，单位秒 |
+| `GENUPDATE_MAX_CONCURRENT_DOWNLOADS` | `64` | 最大并发下载数 |
+
+---
+
+## 更新目录结构
+
+```text
+update/
+├── .ignore
+├── 星月/
+│   ├── ReleaseNote.txt
+│   ├── qqwry.dat
+│   └── data/
+│       └── sqlite.sqlite
+└── 鬼泣/
+    ├── ReleaseNote.txt
+    └── demo.exe
+```
+
+每个一级目录会作为一个软件名称，例如 `星月` 对应接口 `/updateList/星月`。该目录下的普通文件会进入清单，子目录文件也会保留相对路径。
 
 ### ReleaseNote.txt
 
-在软件目录下创建版本公告：
+在软件目录下创建 `ReleaseNote.txt`，内容为 JSON：
 
 ```json
 {
@@ -75,35 +173,47 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 }
 ```
 
----
+如果没有提供该文件，服务会使用默认值：
 
-## 📂 目录结构示例
-
-```text
-update/
-├── .ignore
-├── 星月/
-│   ├── ReleaseNote.txt
-│   └── qqwry.dat
-└── 鬼泣/
-    ├── ReleaseNote.txt
-    └── demo.exe
+```json
+{
+  "appName": "目录名",
+  "description": "null",
+  "version": "1.0.0"
+}
 ```
 
+### .ignore
+
+在更新根目录下创建 `.ignore`，可按 gitignore 风格忽略不需要进入清单的文件。
+
+服务还会自动忽略以下内部文件：
+
+- `ReleaseNote.txt`
+- `.ignore`
+- `jsonBody.json`
+- `manifest-cache.json`
+
 ---
 
-## 🙏 致谢
+## 生成文件
 
-- [go-gitignore](https://github.com/matoous/go-gitignore)
+服务扫描后会在更新目录下生成：
 
-相关项目：[genUpdate_client](https://github.com/jwwsjlm/genUpdate_client)
+- `jsonBody.json`：当前所有软件的更新清单快照。
+- `manifest-cache.json`：SHA256 缓存，用于减少重复哈希计算。
+
+这两个文件属于服务内部文件，默认不会出现在更新清单中。
 
 ---
 
-## 📄 许可证
+## 相关项目
+
+- 客户端：[genUpdate_client](https://github.com/jwwsjlm/genUpdate_client)
+- 依赖：[go-gitignore](https://github.com/matoous/go-gitignore)
+
+---
+
+## 许可证
 
 MIT License
-
----
-
-**如果有帮助，欢迎 Star ⭐️！**
