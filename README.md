@@ -40,6 +40,8 @@ go run ./cmd/main
 
 浏览器打开 `http://localhost:8090/` 可以进入 Web 更新中心。
 
+页面右上角可以直接生成随机 Token，适合复制到 `GENUPDATE_APP_TOKENS` 中使用。
+
 ### 编译
 
 ```bash
@@ -250,6 +252,8 @@ curl -H "Authorization: Bearer cc-secret" http://localhost:8090/download/cc/app.
 ```
 
 此时即使用户猜到 `bb`，使用 `cc-secret` 访问 `/updateList/bb` 或 `/download/bb/...` 也只会得到 404。
+
+Web 更新中心提供本地随机 Token 生成按钮，生成逻辑在浏览器内完成，服务端不会保存或记录该 Token。
 
 ---
 

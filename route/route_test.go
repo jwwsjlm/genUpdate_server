@@ -254,7 +254,7 @@ func TestWebIndexAndAppsAPI(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("index status = %d, want 200", rec.Code)
 	}
-	if body := rec.Body.String(); !containsAll(body, "GenUpdate", "/api/apps", "更新中心") {
+	if body := rec.Body.String(); !containsAll(body, "GenUpdate", "/api/apps", "更新中心", "generateTokenBtn") {
 		t.Fatalf("index body missing expected content: %s", body)
 	}
 

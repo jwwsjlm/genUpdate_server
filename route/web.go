@@ -35,6 +35,10 @@ const indexHTML = `<!doctype html>
     .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     .btn:hover { border-color: #aeb8c6; }
     .btn.primary:hover { background: var(--accent-strong); }
+    .token-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; box-shadow: 0 1px 0 rgba(31, 41, 55, .03); }
+    .token-panel[hidden] { display: none; }
+    .token-panel input { width: 100%; height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; outline: none; background: #fbfcfd; font-family: "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+    .token-status { color: var(--muted); font-size: 12px; white-space: nowrap; }
     .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
     .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; box-shadow: 0 1px 0 rgba(31, 41, 55, .03); min-width: 0; }
     .stat .label { color: var(--muted); font-size: 12px; margin-bottom: 9px; }
@@ -76,6 +80,7 @@ const indexHTML = `<!doctype html>
       .layout { grid-template-columns: 1fr; }
       .app-list { max-height: 260px; }
       .detail-head, .toolbar { flex-direction: column; align-items: stretch; }
+      .token-panel { grid-template-columns: 1fr; }
     }
     @media (max-width: 520px) {
       .stats { grid-template-columns: 1fr; }
@@ -96,10 +101,16 @@ const indexHTML = `<!doctype html>
         </div>
       </div>
       <div class="actions">
+        <button class="btn" id="generateTokenBtn" type="button">生成 Token</button>
         <button class="btn" id="refreshBtn" type="button">刷新</button>
         <a class="btn primary" href="/version" target="_blank" rel="noreferrer">版本接口</a>
       </div>
     </header>
+    <section class="token-panel" id="tokenPanel" aria-label="Token generator" hidden>
+      <input id="tokenOutput" type="text" readonly spellcheck="false">
+      <button class="btn primary" id="copyTokenBtn" type="button">复制</button>
+      <div class="token-status" id="tokenStatus">32 bytes · base64url</div>
+    </section>
     <section class="stats" aria-label="统计信息">
       <div class="stat"><div class="label">软件数量</div><div class="value" id="totalApps">-</div></div>
       <div class="stat"><div class="label">文件数量</div><div class="value" id="totalFiles">-</div></div>
@@ -261,6 +272,35 @@ const indexHTML = `<!doctype html>
       return escapeHTML(value);
     }
 
+    function generateToken(byteLength = 32) {
+      const bytes = new Uint8Array(byteLength);
+      crypto.getRandomValues(bytes);
+      let binary = "";
+      bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    async function copyToken() {
+      const token = el("tokenOutput").value;
+      if (!token) return;
+      try {
+        await navigator.clipboard.writeText(token);
+        el("tokenStatus").textContent = "已复制";
+      } catch {
+        el("tokenOutput").select();
+        document.execCommand("copy");
+        el("tokenStatus").textContent = "已复制";
+      }
+    }
+
+    el("generateTokenBtn").addEventListener("click", () => {
+      el("tokenOutput").value = generateToken();
+      el("tokenPanel").hidden = false;
+      el("tokenStatus").textContent = "32 bytes · base64url";
+    });
+    el("copyTokenBtn").addEventListener("click", copyToken);
     el("refreshBtn").addEventListener("click", loadData);
     el("appSearch").addEventListener("input", (event) => {
       state.query = event.target.value;
