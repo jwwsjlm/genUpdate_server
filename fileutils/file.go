@@ -1,23 +1,23 @@
 package fileutils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"encoding/json"
-
 	ignore "github.com/Diogenesoftoronto/go-gitignore"
-	"github.com/duke-git/lancet/v2/fileutil"
 	"github.com/jwwsjlm/genUpdate_server/utils"
 )
 
 var (
 	listJSON = make(map[string]FileList)
-	manifest = manifestCache{Files: make(map[string]cachedFileMeta)}
 	mu       sync.RWMutex
 )
 
@@ -66,7 +66,6 @@ func InitListUpdate(ignoreFilePath, rootDir string) error {
 
 	mu.Lock()
 	listJSON = newList
-	manifest = newCache
 	mu.Unlock()
 	return nil
 }
@@ -84,7 +83,7 @@ func writeJSONFile(path string, list map[string]FileList) error {
 
 func loadManifestCache(path string) (manifestCache, error) {
 	cache := manifestCache{Files: make(map[string]cachedFileMeta)}
-	if !fileutil.IsExist(path) {
+	if !fileExists(path) {
 		return cache, nil
 	}
 
@@ -113,7 +112,7 @@ func saveManifestCache(path string, cache manifestCache) error {
 }
 
 func generateFileLists(ignoreFilePath, rootDir string, cache manifestCache) (map[string]FileList, manifestCache, error) {
-	ignoreFile, err := ignore.CompileIgnoreFile(ignoreFilePath)
+	ignoreFile, err := compileIgnoreFile(ignoreFilePath)
 	if err != nil {
 		return nil, manifestCache{}, fmt.Errorf("编译忽略文件失败: %w", err)
 	}
@@ -145,6 +144,13 @@ func generateFileLists(ignoreFilePath, rootDir string, cache manifestCache) (map
 	return fileMap, newCache, nil
 }
 
+func compileIgnoreFile(ignoreFilePath string) (*ignore.GitIgnore, error) {
+	if !fileExists(ignoreFilePath) {
+		return ignore.CompileIgnoreLines(), nil
+	}
+	return ignore.CompileIgnoreFile(ignoreFilePath)
+}
+
 func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, path, name string) bool {
 	return ignoreFile.MatchesPath(name) ||
 		strings.HasSuffix(path, "jsonBody.json") ||
@@ -173,7 +179,7 @@ func processFile(rootDir, path string, d os.DirEntry, cache manifestCache) (File
 	if old, ok := cache.Files[relativePath]; ok && old.Size == meta.Size && old.ModTime == meta.ModTime {
 		meta.SHA256 = old.SHA256
 	} else {
-		meta.SHA256, err = fileutil.Sha(path, 256)
+		meta.SHA256, err = calculateSHA256(path)
 		if err != nil {
 			return FileInfo{}, cachedFileMeta{}, fmt.Errorf("计算文件哈希失败: %w", err)
 		}
@@ -208,7 +214,7 @@ func initializeFileList(rootDir, dir string) FileList {
 		Version:     "1.0.0",
 	}
 
-	if fileutil.IsExist(dirNote) {
+	if fileExists(dirNote) {
 		if file, err := os.ReadFile(dirNote); err == nil {
 			_ = json.Unmarshal(file, &note)
 		}
@@ -218,4 +224,23 @@ func initializeFileList(rootDir, dir string) FileList {
 		FileName: dir,
 		Note:     note,
 	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func calculateSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

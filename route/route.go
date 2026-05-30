@@ -1,30 +1,126 @@
 package route
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/duke-git/lancet/v2/fileutil"
 	"github.com/gin-gonic/gin"
 	"github.com/jwwsjlm/genUpdate_server/auth"
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"go.uber.org/zap"
 )
 
-const manifestCacheMaxAge = "60s"
+const (
+	defaultMaxConcurrentDownloads = 64
+	manifestCacheMaxAge           = "60s"
+)
 
-// SetupRouter 设置路由
-func SetupRouter() *gin.Engine {
+var errInvalidDownloadPath = errors.New("invalid download path")
+
+type BuildInfo struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"buildTime"`
+}
+
+type Options struct {
+	UpdateDir              string
+	MaxConcurrentDownloads int
+	Build                  BuildInfo
+}
+
+type downloadLimiter struct {
+	sem chan struct{}
+}
+
+func newDownloadLimiter(limit int) *downloadLimiter {
+	if limit <= 0 {
+		limit = defaultMaxConcurrentDownloads
+	}
+	return &downloadLimiter{sem: make(chan struct{}, limit)}
+}
+
+func (l *downloadLimiter) acquire() bool {
+	select {
+	case l.sem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *downloadLimiter) release() {
+	select {
+	case <-l.sem:
+	default:
+	}
+}
+
+func SetupRouter(updateDir string) *gin.Engine {
+	return SetupRouterWithOptions(Options{UpdateDir: updateDir})
+}
+
+func SetupRouterWithOptions(opts Options) *gin.Engine {
 	r := gin.New()
 	r.Use(ginLogger(auth.Logger))
+	r.Use(gin.Recovery())
 	gin.SetMode(gin.ReleaseMode)
 
+	state := routerState{
+		updateDir: opts.UpdateDir,
+		limiter:   newDownloadLimiter(opts.MaxConcurrentDownloads),
+		build:     opts.Build,
+	}
+
+	r.GET("/healthz", state.healthz)
+	r.GET("/version", state.version)
 	r.GET("/updateList/:filename", getUpdateList)
-	r.GET("/download/*filepath", getDownload)
+	r.GET("/download/*filepath", state.download)
+	r.HEAD("/download/*filepath", state.download)
 
 	return r
+}
+
+type routerState struct {
+	updateDir string
+	limiter   *downloadLimiter
+	build     BuildInfo
+}
+
+func (s routerState) healthz(c *gin.Context) {
+	if s.updateDir == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ret": "error", "error": "update dir not configured"})
+		return
+	}
+	if info, err := os.Stat(s.updateDir); err != nil || !info.IsDir() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ret": "error", "error": "update dir unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ret": "ok", "status": "healthy"})
+}
+
+func (s routerState) version(c *gin.Context) {
+	jsonText, err := fileutils.GetJSONText()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ret": "error", "error": "failed to load version info"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ret":           "ok",
+		"version":       s.build.Version,
+		"commit":        s.build.Commit,
+		"buildTime":     s.build.BuildTime,
+		"fileListBytes": len(jsonText),
+		"cacheMaxAge":   manifestCacheMaxAge,
+	})
 }
 
 func getUpdateList(c *gin.Context) {
@@ -34,31 +130,77 @@ func getUpdateList(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": f})
 		return
 	}
-	c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "软件名不存在"})
+	c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "software not found"})
 }
 
-func getDownload(c *gin.Context) {
-	relPath := strings.TrimPrefix(c.Param("filepath"), "/")
-	if relPath == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"ret": "error", "error": "文件路径不能为空"})
+func (s routerState) download(c *gin.Context) {
+	if !s.limiter.acquire() {
+		c.JSON(http.StatusTooManyRequests, gin.H{"ret": "error", "error": "too many concurrent downloads"})
 		return
 	}
-	if strings.Contains(relPath, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"ret": "error", "error": "非法文件路径"})
+	defer s.limiter.release()
+
+	filePath, cleanPath, err := resolveDownloadPath(s.updateDir, c.Param("filepath"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ret": "error", "error": "invalid file path"})
 		return
 	}
 
-	cleanPath := filepath.Clean(relPath)
-	filePath := filepath.Join("./update", cleanPath)
-	if !fileutil.IsExist(filePath) {
-		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "文件不存在"})
+	file, err := os.Open(filePath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "file not found"})
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "file not found"})
 		return
 	}
 
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Disposition", "attachment; filename="+filepath.Base(cleanPath))
 	c.Header("Content-Type", "application/octet-stream")
-	c.File(filePath)
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("ETag", weakETag(info))
+	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+}
+
+func weakETag(info os.FileInfo) string {
+	h := sha256.New()
+	_, _ = io.WriteString(h, info.Name())
+	_, _ = io.WriteString(h, fmt.Sprintf(":%d:%d", info.Size(), info.ModTime().UnixNano()))
+	return `W/"` + hex.EncodeToString(h.Sum(nil)) + `"`
+}
+
+func resolveDownloadPath(rootDir, requestPath string) (string, string, error) {
+	relPath := strings.TrimPrefix(requestPath, "/")
+	if relPath == "" {
+		return "", "", errInvalidDownloadPath
+	}
+
+	cleanPath := filepath.Clean(filepath.FromSlash(relPath))
+	if cleanPath == "." || filepath.IsAbs(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(filepath.Separator)) {
+		return "", "", errInvalidDownloadPath
+	}
+
+	rootAbs, err := filepath.Abs(rootDir)
+	if err != nil {
+		return "", "", err
+	}
+	filePath := filepath.Join(rootAbs, cleanPath)
+	fileAbs, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", "", err
+	}
+
+	relToRoot, err := filepath.Rel(rootAbs, fileAbs)
+	if err != nil || relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
+		return "", "", errInvalidDownloadPath
+	}
+
+	return fileAbs, filepath.ToSlash(cleanPath), nil
 }
 
 func ginLogger(logger *zap.Logger) gin.HandlerFunc {
@@ -66,17 +208,20 @@ func ginLogger(logger *zap.Logger) gin.HandlerFunc {
 		start := time.Now()
 		c.Next()
 
-		for _, e := range c.Errors {
-			logger.Error("请求处理错误", zap.String("error", e.Error()))
+		if logger == nil {
+			return
 		}
 
-		latency := time.Since(start)
-		logger.Info("请求日志",
-			zap.String("方法", c.Request.Method),
-			zap.String("路径", c.Request.URL.Path),
-			zap.Int("状态码", c.Writer.Status()),
-			zap.Duration("处理时间", latency),
-			zap.String("客户端IP", c.ClientIP()),
+		for _, e := range c.Errors {
+			logger.Error("request error", zap.String("error", e.Error()))
+		}
+
+		logger.Info("request",
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("client_ip", c.ClientIP()),
 		)
 	}
 }

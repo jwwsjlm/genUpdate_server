@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+build
+log
+tmp
+*.log
+*.out
+*.test
+*.exe
+genUpdate_server.7z
+update

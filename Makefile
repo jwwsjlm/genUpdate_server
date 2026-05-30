@@ -5,7 +5,10 @@ GOBUILD := $(GO) build
 GOCLEAN := $(GO) clean
 GOMOD := $(GO) mod
 GOGET := $(GO) get
-LDFLAGS := -s -w
+VERSION ?= dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
 GOOS_WINDOWS := windows
 GOARCH_WINDOWS := amd64
 GOOS_LINUX := linux

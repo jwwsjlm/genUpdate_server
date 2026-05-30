@@ -1,21 +1,23 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jwwsjlm/genUpdate_server/auth"
+	"github.com/jwwsjlm/genUpdate_server/config"
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"github.com/jwwsjlm/genUpdate_server/route"
 	"go.uber.org/zap"
 )
 
-const (
-	defaultUpdateInterval = 5 * time.Minute
-	defaultServerPort     = ":8090"
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
 )
 
 func init() {
@@ -26,20 +28,24 @@ func main() {
 	setupLogger()
 	defer closeLogger()
 
-	dir, err := os.Getwd()
+	workDir, err := os.Getwd()
 	if err != nil {
-		auth.Panicf("获取当前目录失败: %s", err.Error())
+		auth.Panicf("failed to get working directory: %v", err)
 	}
 
-	updateDir := filepath.Join(dir, "update")
-	initUpdateList(updateDir)
+	cfg, err := config.Load(workDir)
+	if err != nil {
+		auth.Panicf("failed to load config: %v", err)
+	}
 
-	interval := getUpdateInterval()
-	ticker := time.NewTicker(interval)
+	initUpdateList(cfg.UpdateDir)
+
+	ticker := time.NewTicker(cfg.ScanInterval)
 	defer ticker.Stop()
-	go periodicUpdate(ticker, updateDir)
+	go periodicUpdate(ticker, cfg.UpdateDir)
 
-	startServer(getServerPort())
+	auth.Infof("server starting on %s, update dir: %s, scan interval: %s", cfg.Port, cfg.UpdateDir, cfg.ScanInterval)
+	startServer(cfg)
 }
 
 func setupLogger() {
@@ -48,14 +54,14 @@ func setupLogger() {
 
 func closeLogger() {
 	if err := auth.Logger.Sync(); err != nil {
-		auth.Error("关闭 zap log sync 出错", zap.Error(err))
+		auth.Error("failed to sync logger", zap.Error(err))
 	}
 }
 
 func initUpdateList(dir string) {
 	ignorePath := filepath.Join(dir, ".ignore")
 	if err := fileutils.InitListUpdate(ignorePath, dir); err != nil {
-		auth.Panicf("读取文件失败: %v", err)
+		auth.Panicf("failed to read update files: %v", err)
 	}
 	logFileListSummary()
 }
@@ -63,47 +69,38 @@ func initUpdateList(dir string) {
 func logFileListSummary() {
 	jsonData, err := fileutils.GetJSONText()
 	if err != nil {
-		auth.Errorf("生成文件列表 JSON 失败: %v", err)
+		auth.Errorf("failed to build file list JSON: %v", err)
 		return
 	}
-	auth.Infof("文件 JSON 生成成功，长度: %d bytes", len(jsonData))
+	auth.Infof("file list JSON generated, length: %d bytes", len(jsonData))
 }
 
 func periodicUpdate(ticker *time.Ticker, dir string) {
 	ignorePath := filepath.Join(dir, ".ignore")
 	for range ticker.C {
 		if err := fileutils.InitListUpdate(ignorePath, dir); err != nil {
-			auth.Errorf("刷新列表失败: %v", err)
+			auth.Errorf("failed to refresh update list: %v", err)
 		}
 	}
 }
 
-func startServer(port string) {
-	r := route.SetupRouter()
-	if err := r.Run(port); err != nil {
-		auth.Panicf("Gin 启动失败: %v", err)
+func startServer(cfg config.Config) {
+	server := &http.Server{
+		Addr: cfg.Port,
+		Handler: route.SetupRouterWithOptions(route.Options{
+			UpdateDir:              cfg.UpdateDir,
+			MaxConcurrentDownloads: cfg.MaxConcurrentDownloads,
+			Build: route.BuildInfo{
+				Version:   version,
+				Commit:    commit,
+				BuildTime: buildTime,
+			},
+		}),
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
 	}
-}
-
-func getServerPort() string {
-	port := os.Getenv("GENUPDATE_PORT")
-	if port == "" {
-		return defaultServerPort
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		auth.Panicf("server failed: %v", err)
 	}
-	if port[0] != ':' {
-		return ":" + port
-	}
-	return port
-}
-
-func getUpdateInterval() time.Duration {
-	secondsText := os.Getenv("GENUPDATE_SCAN_INTERVAL_SECONDS")
-	if secondsText == "" {
-		return defaultUpdateInterval
-	}
-	seconds, err := strconv.Atoi(secondsText)
-	if err != nil || seconds <= 0 {
-		return defaultUpdateInterval
-	}
-	return time.Duration(seconds) * time.Second
 }
