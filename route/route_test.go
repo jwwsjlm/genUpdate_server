@@ -54,6 +54,9 @@ func TestResolveDownloadPath(t *testing.T) {
 func TestDownloadSupportsHeadAndRangeRequests(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	root := createDownloadFixture(t)
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
 	router := SetupRouter(root)
 
 	t.Run("range request", func(t *testing.T) {
@@ -94,6 +97,122 @@ func TestDownloadSupportsHeadAndRangeRequests(t *testing.T) {
 		}
 		if got := rec.Header().Get("Content-Length"); got != "10" {
 			t.Fatalf("Content-Length = %q, want 10", got)
+		}
+	})
+}
+
+func TestDownloadOnlyServesManifestFiles(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := createDownloadFixture(t)
+	if err := os.WriteFile(filepath.Join(root, "app", ".env"), []byte("secret"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.env) error = %v", err)
+	}
+	privateDir := filepath.Join(root, "app", ".private")
+	if err := os.MkdirAll(privateDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(.private) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(privateDir, "token.txt"), []byte("secret"), 0o644); err != nil {
+		t.Fatalf("WriteFile(token.txt) error = %v", err)
+	}
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
+	router := SetupRouter(root)
+
+	tests := []string{
+		"/download/jsonBody.json",
+		"/download/manifest-cache.json",
+		"/download/app/.env",
+		"/download/app/.private/token.txt",
+	}
+	for _, path := range tests {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404, body = %q", rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apps status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, ".env") || strings.Contains(body, ".private") {
+		t.Fatalf("apps body leaked hidden files: %s", body)
+	}
+}
+
+func TestAppTokenScopesListsAndDownloads(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "cc", "cc.exe"), "cc")
+	writeTestFile(t, filepath.Join(root, "bb", "bb.exe"), "bb")
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
+	router := SetupRouterWithOptions(Options{
+		UpdateDir: root,
+		AppTokens: map[string]string{"cc": "cc-token", "bb": "bb-token"},
+	})
+
+	t.Run("apps requires token", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+		if body := rec.Body.String(); strings.Contains(body, "cc") || strings.Contains(body, "bb") {
+			t.Fatalf("unauthorized apps response leaked names: %s", body)
+		}
+	})
+
+	t.Run("apps only returns authorized app", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+		req.Header.Set("Authorization", "Bearer cc-token")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `"fileName":"cc"`) || strings.Contains(body, `"fileName":"bb"`) {
+			t.Fatalf("apps body scoped incorrectly: %s", body)
+		}
+	})
+
+	t.Run("update list hides other apps", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/updateList/bb", nil)
+		req.Header.Set("X-Update-Token", "cc-token")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("download hides other apps", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/download/bb/bb.exe", nil)
+		req.Header.Set("Authorization", "Bearer cc-token")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("download allows matching app token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/download/cc/cc.exe", nil)
+		req.Header.Set("Authorization", "Bearer cc-token")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		if got := rec.Body.String(); got != "cc" {
+			t.Fatalf("body = %q, want cc", got)
 		}
 	})
 }
@@ -170,11 +289,18 @@ func createDownloadFixture(t *testing.T) string {
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	filePath := filepath.Join(appDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("0123456789"), 0o644); err != nil {
+	writeTestFile(t, filepath.Join(appDir, "file.txt"), "0123456789")
+	return root
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	return root
 }
 
 func containsAll(text string, values ...string) bool {

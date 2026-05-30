@@ -39,6 +39,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Check GoReleaser config
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
       - name: Test
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type Config struct {
 	WriteTimeout           time.Duration `json:"writeTimeout"`
 	IdleTimeout            time.Duration `json:"idleTimeout"`
 	MaxConcurrentDownloads int           `json:"maxConcurrentDownloads"`
+	AppTokens              map[string]string
 }
 
 func Load(workDir string) (Config, error) {
@@ -40,6 +42,7 @@ func Load(workDir string) (Config, error) {
 		WriteTimeout:           GetDurationFromEnv("GENUPDATE_WRITE_TIMEOUT_SECONDS", DefaultWriteTimeout),
 		IdleTimeout:            GetDurationFromEnv("GENUPDATE_IDLE_TIMEOUT_SECONDS", DefaultIdleTimeout),
 		MaxConcurrentDownloads: GetIntFromEnv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", DefaultMaxConcurrentDownloads),
+		AppTokens:              GetAppTokensFromEnv("GENUPDATE_APP_TOKENS"),
 	}, nil
 }
 
@@ -76,6 +79,32 @@ func GetIntFromEnv(name string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func GetAppTokensFromEnv(name string) map[string]string {
+	valueText := strings.TrimSpace(os.Getenv(name))
+	if valueText == "" {
+		return nil
+	}
+
+	tokens := make(map[string]string)
+	for _, pair := range strings.Split(valueText, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		app, token, ok := strings.Cut(pair, "=")
+		app = strings.TrimSpace(app)
+		token = strings.TrimSpace(token)
+		if !ok || app == "" || token == "" {
+			continue
+		}
+		tokens[app] = token
+	}
+	if len(tokens) == 0 {
+		return nil
+	}
+	return tokens
 }
 
 func getUpdateDir(workDir string) (string, error) {

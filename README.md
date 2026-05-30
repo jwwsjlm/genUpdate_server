@@ -21,6 +21,7 @@
 - 版本公告：每个软件目录可放置 `ReleaseNote.txt`，用于返回应用名、版本号和更新说明。
 - 运维接口：提供 `/healthz` 健康检查和 `/version` 构建版本信息接口。
 - Web 更新中心：访问根路径即可浏览软件、版本公告、文件列表、SHA256 和下载入口。
+- 下载白名单：下载接口只允许访问已进入更新清单的文件，内部文件和隐藏文件不会被直接下载。
 - Docker 部署：内置多阶段 Dockerfile，可直接挂载更新目录运行。
 
 ---
@@ -61,6 +62,19 @@ docker run -d \
   -v ./update:/app/update \
   jwwsjlm/genUpdate_server:latest
 ```
+
+---
+
+## 发布
+
+项目使用 GoReleaser 自动构建发布包。创建并推送符合 `vMAJOR.MINOR.PATCH` 格式的 tag 后，GitHub Actions 会自动测试、构建 Linux/Windows 的 amd64/arm64 产物，并生成 checksums。
+
+```bash
+git tag -a v0.2.1 -m "v0.2.1"
+git push origin v0.2.1
+```
+
+也可以在 GitHub Actions 的 Release workflow 里手动输入 tag 触发发布。
 
 ---
 
@@ -152,6 +166,7 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 | `GENUPDATE_WRITE_TIMEOUT_SECONDS` | `600` | HTTP 写入超时，单位秒 |
 | `GENUPDATE_IDLE_TIMEOUT_SECONDS` | `60` | HTTP 空闲连接超时，单位秒 |
 | `GENUPDATE_MAX_CONCURRENT_DOWNLOADS` | `64` | 最大并发下载数 |
+| `GENUPDATE_APP_TOKENS` | 空 | 按软件授权的 token 映射，例如 `cc=cc-token,bb=bb-token` |
 
 ---
 
@@ -215,6 +230,26 @@ update/
 - `manifest-cache.json`：SHA256 缓存，用于减少重复哈希计算。
 
 这两个文件属于服务内部文件，默认不会出现在更新清单中。
+
+---
+
+## 安全说明
+
+- 下载接口会校验路径，阻止 `../` 等路径穿越。
+- 下载接口只服务当前清单中的文件，`jsonBody.json`、`manifest-cache.json`、`.ignore`、`ReleaseNote.txt` 等内部文件即使存在也不能通过 `/download/*` 下载。
+- 扫描时默认跳过隐藏文件和隐藏目录，例如 `.env`、`.secret/`，避免敏感文件误进入更新清单。
+- 如需私有分发，可配置 `GENUPDATE_APP_TOKENS`。配置后，客户端必须通过 `Authorization: Bearer <token>` 或 `X-Update-Token: <token>` 访问对应软件；错误 token 会返回 404，避免暴露其他软件名称。
+- 对外部署时建议只把可公开分发的更新包放进 `update` 目录，并在反向代理层启用 HTTPS、访问日志、限速和必要的鉴权策略。
+
+按软件授权示例：
+
+```bash
+GENUPDATE_APP_TOKENS="cc=cc-secret,bb=bb-secret" ./genUpdate_server
+curl -H "Authorization: Bearer cc-secret" http://localhost:8090/updateList/cc
+curl -H "Authorization: Bearer cc-secret" http://localhost:8090/download/cc/app.exe -o app.exe
+```
+
+此时即使用户猜到 `bb`，使用 `cc-secret` 访问 `/updateList/bb` 或 `/download/bb/...` 也只会得到 404。
 
 ---
 

@@ -90,6 +90,7 @@ func startServer(cfg config.Config) {
 		Handler: route.SetupRouterWithOptions(route.Options{
 			UpdateDir:              cfg.UpdateDir,
 			MaxConcurrentDownloads: cfg.MaxConcurrentDownloads,
+			AppTokens:              cfg.AppTokens,
 			Build: route.BuildInfo{
 				Version:   version,
 				Commit:    commit,

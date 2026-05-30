@@ -53,6 +53,24 @@ func GetAllLists() []FileList {
 	return lists
 }
 
+func HasFilePath(path string) bool {
+	cleanPath := filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimPrefix(path, "/"))))
+	if cleanPath == "." || cleanPath == "" {
+		return false
+	}
+
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, fileInfo := range listJSON {
+		for _, f := range fileInfo.Files {
+			if f.Path == cleanPath {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func GetJSONText() (string, error) {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -139,7 +157,16 @@ func generateFileLists(ignoreFilePath, rootDir string, cache manifestCache) (map
 		if walkErr != nil {
 			return fmt.Errorf("遍历路径 %v 时出错: %w", path, walkErr)
 		}
-		if d.IsDir() || shouldIgnoreFile(ignoreFile, path, d.Name()) {
+		if path == rootDir {
+			return nil
+		}
+		if shouldIgnorePath(ignoreFile, rootDir, path, d.Name()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
 			return nil
 		}
 
@@ -166,12 +193,21 @@ func compileIgnoreFile(ignoreFilePath string) (*ignore.GitIgnore, error) {
 	return ignore.CompileIgnoreFile(ignoreFilePath)
 }
 
-func shouldIgnoreFile(ignoreFile *ignore.GitIgnore, path, name string) bool {
-	return ignoreFile.MatchesPath(name) ||
-		strings.HasSuffix(path, "jsonBody.json") ||
-		strings.HasSuffix(path, "manifest-cache.json") ||
-		strings.HasSuffix(path, "ReleaseNote.txt") ||
-		strings.HasSuffix(path, ".ignore")
+func shouldIgnorePath(ignoreFile *ignore.GitIgnore, rootDir, path, name string) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	switch name {
+	case "jsonBody.json", "manifest-cache.json", "ReleaseNote.txt":
+		return true
+	}
+
+	relativePath, err := filepath.Rel(rootDir, path)
+	if err != nil {
+		return true
+	}
+	relativePath = filepath.ToSlash(relativePath)
+	return ignoreFile.MatchesPath(name) || ignoreFile.MatchesPath(relativePath)
 }
 
 func processFile(rootDir, path string, d os.DirEntry, cache manifestCache) (FileInfo, cachedFileMeta, error) {

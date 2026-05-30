@@ -2,6 +2,7 @@ package route
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -35,6 +36,7 @@ type Options struct {
 	UpdateDir              string
 	MaxConcurrentDownloads int
 	Build                  BuildInfo
+	AppTokens              map[string]string
 }
 
 type downloadLimiter struct {
@@ -70,6 +72,7 @@ func SetupRouter(updateDir string) *gin.Engine {
 
 func SetupRouterWithOptions(opts Options) *gin.Engine {
 	r := gin.New()
+	r.Use(securityHeaders())
 	r.Use(ginLogger(auth.Logger))
 	r.Use(gin.Recovery())
 	gin.SetMode(gin.ReleaseMode)
@@ -78,13 +81,14 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 		updateDir: opts.UpdateDir,
 		limiter:   newDownloadLimiter(opts.MaxConcurrentDownloads),
 		build:     opts.Build,
+		appTokens: opts.AppTokens,
 	}
 
 	r.GET("/healthz", state.healthz)
 	r.GET("/version", state.version)
 	r.GET("/", state.index)
 	r.GET("/api/apps", state.apps)
-	r.GET("/updateList/:filename", getUpdateList)
+	r.GET("/updateList/:filename", state.getUpdateList)
 	r.GET("/download/*filepath", state.download)
 	r.HEAD("/download/*filepath", state.download)
 
@@ -95,6 +99,7 @@ type routerState struct {
 	updateDir string
 	limiter   *downloadLimiter
 	build     BuildInfo
+	appTokens map[string]string
 }
 
 func (s routerState) healthz(c *gin.Context) {
@@ -127,6 +132,13 @@ func (s routerState) version(c *gin.Context) {
 
 func (s routerState) apps(c *gin.Context) {
 	lists := fileutils.GetAllLists()
+	lists, ok := s.filterAuthorizedLists(c, lists)
+	if !ok {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusUnauthorized, gin.H{"ret": "error", "error": "unauthorized"})
+		return
+	}
+
 	totalFiles := 0
 	totalBytes := int64(0)
 	for _, app := range lists {
@@ -136,7 +148,11 @@ func (s routerState) apps(c *gin.Context) {
 		}
 	}
 
-	c.Header("Cache-Control", "public, max-age=60")
+	if len(s.appTokens) == 0 {
+		c.Header("Cache-Control", "public, max-age=60")
+	} else {
+		c.Header("Cache-Control", "private, no-store")
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"ret":        "ok",
 		"apps":       lists,
@@ -151,10 +167,18 @@ func (s routerState) index(c *gin.Context) {
 	c.String(http.StatusOK, indexHTML)
 }
 
-func getUpdateList(c *gin.Context) {
+func (s routerState) getUpdateList(c *gin.Context) {
 	filename := c.Param("filename")
+	if !s.authorizeApp(c, filename) {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "software not found"})
+		return
+	}
 	if f, ok := fileutils.GetList(filename); ok {
-		c.Header("Cache-Control", "public, max-age=60")
+		if len(s.appTokens) == 0 {
+			c.Header("Cache-Control", "public, max-age=60")
+		} else {
+			c.Header("Cache-Control", "private, no-store")
+		}
 		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": f})
 		return
 	}
@@ -171,6 +195,14 @@ func (s routerState) download(c *gin.Context) {
 	filePath, cleanPath, err := resolveDownloadPath(s.updateDir, c.Param("filepath"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"ret": "error", "error": "invalid file path"})
+		return
+	}
+	if !fileutils.HasFilePath(cleanPath) {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "file not found"})
+		return
+	}
+	if !s.authorizeApp(c, appNameFromCleanPath(cleanPath)) {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "file not found"})
 		return
 	}
 
@@ -202,6 +234,51 @@ func weakETag(info os.FileInfo) string {
 	return `W/"` + hex.EncodeToString(h.Sum(nil)) + `"`
 }
 
+func (s routerState) filterAuthorizedLists(c *gin.Context, lists []fileutils.FileList) ([]fileutils.FileList, bool) {
+	if len(s.appTokens) == 0 {
+		return lists, true
+	}
+
+	filtered := make([]fileutils.FileList, 0, len(lists))
+	for _, list := range lists {
+		if s.authorizeApp(c, list.FileName) {
+			filtered = append(filtered, list)
+		}
+	}
+	return filtered, len(filtered) > 0
+}
+
+func (s routerState) authorizeApp(c *gin.Context, appName string) bool {
+	if len(s.appTokens) == 0 {
+		return true
+	}
+	expectedToken, ok := s.appTokens[appName]
+	if !ok || expectedToken == "" {
+		return false
+	}
+	token := requestToken(c)
+	if token == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1
+}
+
+func requestToken(c *gin.Context) string {
+	const bearerPrefix = "bearer "
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+	if len(authHeader) >= len(bearerPrefix) && strings.EqualFold(authHeader[:len(bearerPrefix)], bearerPrefix) {
+		if token := strings.TrimSpace(authHeader[len(bearerPrefix):]); token != "" {
+			return token
+		}
+	}
+	return strings.TrimSpace(c.GetHeader("X-Update-Token"))
+}
+
+func appNameFromCleanPath(cleanPath string) string {
+	appName, _, _ := strings.Cut(cleanPath, "/")
+	return appName
+}
+
 func resolveDownloadPath(rootDir, requestPath string) (string, string, error) {
 	relPath := strings.TrimPrefix(requestPath, "/")
 	if relPath == "" {
@@ -229,6 +306,16 @@ func resolveDownloadPath(rootDir, requestPath string) (string, string, error) {
 	}
 
 	return fileAbs, filepath.ToSlash(cleanPath), nil
+}
+
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+		c.Next()
+	}
 }
 
 func ginLogger(logger *zap.Logger) gin.HandlerFunc {

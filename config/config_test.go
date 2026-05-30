@@ -57,11 +57,25 @@ func TestGetIntFromEnv(t *testing.T) {
 	}
 }
 
+func TestGetAppTokensFromEnv(t *testing.T) {
+	t.Setenv("TEST_APP_TOKENS", "")
+	if got := GetAppTokensFromEnv("TEST_APP_TOKENS"); got != nil {
+		t.Fatalf("empty app tokens = %#v, want nil", got)
+	}
+
+	t.Setenv("TEST_APP_TOKENS", "cc=token-cc, bb = token-bb , broken, empty=")
+	got := GetAppTokensFromEnv("TEST_APP_TOKENS")
+	if got["cc"] != "token-cc" || got["bb"] != "token-bb" || len(got) != 2 {
+		t.Fatalf("app tokens = %#v", got)
+	}
+}
+
 func TestLoad(t *testing.T) {
 	workDir := t.TempDir()
 
 	t.Setenv("GENUPDATE_UPDATE_DIR", "")
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "5")
+	t.Setenv("GENUPDATE_APP_TOKENS", "cc=token-cc")
 	cfg, err := Load(workDir)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -71,6 +85,9 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.MaxConcurrentDownloads != 5 {
 		t.Fatalf("max concurrent downloads = %d, want 5", cfg.MaxConcurrentDownloads)
+	}
+	if cfg.AppTokens["cc"] != "token-cc" {
+		t.Fatalf("app token = %#v", cfg.AppTokens)
 	}
 
 	customDir := filepath.Join(workDir, "custom")
