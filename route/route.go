@@ -82,6 +82,8 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 
 	r.GET("/healthz", state.healthz)
 	r.GET("/version", state.version)
+	r.GET("/", state.index)
+	r.GET("/api/apps", state.apps)
 	r.GET("/updateList/:filename", getUpdateList)
 	r.GET("/download/*filepath", state.download)
 	r.HEAD("/download/*filepath", state.download)
@@ -121,6 +123,32 @@ func (s routerState) version(c *gin.Context) {
 		"fileListBytes": len(jsonText),
 		"cacheMaxAge":   manifestCacheMaxAge,
 	})
+}
+
+func (s routerState) apps(c *gin.Context) {
+	lists := fileutils.GetAllLists()
+	totalFiles := 0
+	totalBytes := int64(0)
+	for _, app := range lists {
+		totalFiles += len(app.Files)
+		for _, f := range app.Files {
+			totalBytes += f.Size
+		}
+	}
+
+	c.Header("Cache-Control", "public, max-age=60")
+	c.JSON(http.StatusOK, gin.H{
+		"ret":        "ok",
+		"apps":       lists,
+		"totalApps":  len(lists),
+		"totalFiles": totalFiles,
+		"totalBytes": totalBytes,
+	})
+}
+
+func (s routerState) index(c *gin.Context) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, indexHTML)
 }
 
 func getUpdateList(c *gin.Context) {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jwwsjlm/genUpdate_server/fileutils"
 )
 
 func TestResolveDownloadPath(t *testing.T) {
@@ -118,6 +119,33 @@ func TestHealthAndVersion(t *testing.T) {
 	}
 	if body := rec.Body.String(); !containsAll(body, "1.2.3", "abc123", "fileListBytes") {
 		t.Fatalf("version body missing fields: %s", body)
+	}
+}
+
+func TestWebIndexAndAppsAPI(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := createDownloadFixture(t)
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
+	router := SetupRouter(root)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("index status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !containsAll(body, "GenUpdate", "/api/apps", "更新中心") {
+		t.Fatalf("index body missing expected content: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apps status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !containsAll(body, `"ret":"ok"`, `"totalApps":1`, `"fileName":"app"`, `"downloadURL":"/download/app/file.txt"`) {
+		t.Fatalf("apps body missing expected content: %s", body)
 	}
 }
 

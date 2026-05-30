@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,20 @@ func GetList(fn string) (FileList, bool) {
 	defer mu.RUnlock()
 	fileInfo, ok := listJSON[fn]
 	return fileInfo, ok
+}
+
+func GetAllLists() []FileList {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	lists := make([]FileList, 0, len(listJSON))
+	for _, fileInfo := range listJSON {
+		lists = append(lists, fileInfo)
+	}
+	sort.Slice(lists, func(i, j int) bool {
+		return lists[i].FileName < lists[j].FileName
+	})
+	return lists
 }
 
 func GetJSONText() (string, error) {

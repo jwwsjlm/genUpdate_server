@@ -1,6 +1,6 @@
 module github.com/jwwsjlm/genUpdate_server
 
-go 1.24.5
+go 1.26.3
 
 require (
 	github.com/Diogenesoftoronto/go-gitignore v1.1.0

@@ -4,7 +4,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/jwwsjlm/genUpdate_server)](https://github.com/jwwsjlm/genUpdate_server/releases)
 [![License](https://img.shields.io/github/license/jwwsjlm/genUpdate_server)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.26.3-blue)](https://golang.org)
 
 ---
 
@@ -20,6 +20,7 @@
 - 忽略规则：支持 `update/.ignore`，并自动跳过 `ReleaseNote.txt`、`.ignore`、`jsonBody.json`、`manifest-cache.json` 等内部文件。
 - 版本公告：每个软件目录可放置 `ReleaseNote.txt`，用于返回应用名、版本号和更新说明。
 - 运维接口：提供 `/healthz` 健康检查和 `/version` 构建版本信息接口。
+- Web 更新中心：访问根路径即可浏览软件、版本公告、文件列表、SHA256 和下载入口。
 - Docker 部署：内置多阶段 Dockerfile，可直接挂载更新目录运行。
 
 ---
@@ -35,6 +36,8 @@ go run ./cmd/main
 ```
 
 默认访问地址：`http://localhost:8090`
+
+浏览器打开 `http://localhost:8090/` 可以进入 Web 更新中心。
 
 ### 编译
 
@@ -62,6 +65,14 @@ docker run -d \
 ---
 
 ## API 使用
+
+### 获取全部软件清单
+
+```bash
+curl http://localhost:8090/api/apps
+```
+
+该接口供 Web 页面使用，会返回所有软件清单以及软件数量、文件数量和文件总大小。
 
 ### 健康检查
 
