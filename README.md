@@ -172,6 +172,7 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
   "writeTimeoutSeconds": 600,
   "idleTimeoutSeconds": 60,
   "maxConcurrentDownloads": 64,
+  "maxConcurrentDownloadsPerIP": 8,
   "appTokens": {
     "cc": "cc-token",
     "bb": "bb-token"
@@ -193,6 +194,7 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 | `GENUPDATE_WRITE_TIMEOUT_SECONDS` | `600` | HTTP 写入超时，单位秒 |
 | `GENUPDATE_IDLE_TIMEOUT_SECONDS` | `60` | HTTP 空闲连接超时，单位秒 |
 | `GENUPDATE_MAX_CONCURRENT_DOWNLOADS` | `64` | 最大并发下载数 |
+| `GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP` | `8` | 单个客户端 IP 最大并发下载数 |
 | `GENUPDATE_APP_TOKENS` | 空 | 按软件授权的 token 映射，例如 `cc=cc-token,bb=bb-token` |
 
 ---
@@ -266,6 +268,7 @@ update/
 - 下载接口只服务当前清单中的文件，`jsonBody.json`、`manifest-cache.json`、`.ignore`、`ReleaseNote.txt` 等内部文件即使存在也不能通过 `/download/*` 下载。
 - 扫描时默认跳过隐藏文件和隐藏目录，例如 `.env`、`.secret/`，避免敏感文件误进入更新清单。
 - 如需私有分发，可配置 `GENUPDATE_APP_TOKENS`。配置后，客户端必须通过 `Authorization: Bearer <token>` 或 `X-Update-Token: <token>` 访问对应软件；错误 token 会返回 404，避免暴露其他软件名称。
+- 服务使用 Go 官方 `golang.org/x/sync/semaphore` 限制全局并发下载数和单 IP 并发下载数，避免单个客户端多线程下载占满服务端连接。
 - 对外部署时建议只把可公开分发的更新包放进 `update` 目录，并在反向代理层启用 HTTPS、访问日志、限速和必要的鉴权策略。
 
 按软件授权示例：

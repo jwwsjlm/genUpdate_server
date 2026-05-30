@@ -88,18 +88,20 @@ func startServer(cfg config.Config) {
 	server := &http.Server{
 		Addr: cfg.Port,
 		Handler: route.SetupRouterWithOptions(route.Options{
-			UpdateDir:              cfg.UpdateDir,
-			MaxConcurrentDownloads: cfg.MaxConcurrentDownloads,
-			AppTokens:              cfg.AppTokens,
+			UpdateDir:                   cfg.UpdateDir,
+			MaxConcurrentDownloads:      cfg.MaxConcurrentDownloads,
+			MaxConcurrentDownloadsPerIP: cfg.MaxConcurrentDownloadsPerIP,
+			AppTokens:                   cfg.AppTokens,
 			Build: route.BuildInfo{
 				Version:   version,
 				Commit:    commit,
 				BuildTime: buildTime,
 			},
 		}),
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout:  cfg.IdleTimeout,
+		ReadHeaderTimeout: cfg.ReadTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		auth.Panicf("server failed: %v", err)

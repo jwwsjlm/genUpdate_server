@@ -78,6 +78,7 @@ func TestLoad(t *testing.T) {
 	t.Setenv("GENUPDATE_PORT", "")
 	t.Setenv("GENUPDATE_UPDATE_DIR", "")
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "5")
+	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP", "2")
 	t.Setenv("GENUPDATE_APP_TOKENS", "cc=token-cc")
 	cfg, err := Load(workDir)
 	if err != nil {
@@ -88,6 +89,9 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.MaxConcurrentDownloads != 5 {
 		t.Fatalf("max concurrent downloads = %d, want 5", cfg.MaxConcurrentDownloads)
+	}
+	if cfg.MaxConcurrentDownloadsPerIP != 2 {
+		t.Fatalf("max concurrent downloads per ip = %d, want 2", cfg.MaxConcurrentDownloadsPerIP)
 	}
 	if cfg.AppTokens["cc"] != "token-cc" {
 		t.Fatalf("app token = %#v", cfg.AppTokens)
@@ -114,6 +118,7 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 		"writeTimeoutSeconds": 4,
 		"idleTimeoutSeconds": 5,
 		"maxConcurrentDownloads": 6,
+		"maxConcurrentDownloadsPerIP": 2,
 		"appTokens": {
 			"cc": "file-token"
 		}
@@ -139,6 +144,9 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 	if cfg.MaxConcurrentDownloads != 6 {
 		t.Fatalf("max concurrent downloads = %d, want 6", cfg.MaxConcurrentDownloads)
 	}
+	if cfg.MaxConcurrentDownloadsPerIP != 2 {
+		t.Fatalf("max concurrent downloads per ip = %d, want 2", cfg.MaxConcurrentDownloadsPerIP)
+	}
 	if cfg.AppTokens["cc"] != "file-token" {
 		t.Fatalf("app tokens = %#v", cfg.AppTokens)
 	}
@@ -150,6 +158,7 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	writeConfigFile(t, configPath, `{
 		"port": "9100",
 		"maxConcurrentDownloads": 6,
+		"maxConcurrentDownloadsPerIP": 2,
 		"appTokens": {
 			"cc": "file-token"
 		}
@@ -157,6 +166,7 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	t.Setenv("GENUPDATE_CONFIG", configPath)
 	t.Setenv("GENUPDATE_PORT", "9200")
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "9")
+	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP", "4")
 	t.Setenv("GENUPDATE_APP_TOKENS", "cc=env-token")
 
 	cfg, err := Load(workDir)
@@ -168,6 +178,9 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	}
 	if cfg.MaxConcurrentDownloads != 9 {
 		t.Fatalf("max concurrent downloads = %d, want 9", cfg.MaxConcurrentDownloads)
+	}
+	if cfg.MaxConcurrentDownloadsPerIP != 4 {
+		t.Fatalf("max concurrent downloads per ip = %d, want 4", cfg.MaxConcurrentDownloadsPerIP)
 	}
 	if cfg.AppTokens["cc"] != "env-token" {
 		t.Fatalf("app tokens = %#v", cfg.AppTokens)

@@ -6,6 +6,7 @@ require (
 	github.com/Diogenesoftoronto/go-gitignore v1.1.0
 	github.com/gin-gonic/gin v1.10.1
 	go.uber.org/zap v1.27.0
+	golang.org/x/sync v0.20.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 

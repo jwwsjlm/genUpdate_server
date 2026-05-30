@@ -11,17 +11,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jwwsjlm/genUpdate_server/auth"
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
-	defaultMaxConcurrentDownloads = 64
-	manifestCacheMaxAge           = "60s"
+	defaultMaxConcurrentDownloads      = 64
+	defaultMaxConcurrentDownloadsPerIP = 8
+	manifestCacheMaxAge                = "60s"
 )
 
 var errInvalidDownloadPath = errors.New("invalid download path")
@@ -33,37 +36,84 @@ type BuildInfo struct {
 }
 
 type Options struct {
-	UpdateDir              string
-	MaxConcurrentDownloads int
-	Build                  BuildInfo
-	AppTokens              map[string]string
+	UpdateDir                   string
+	MaxConcurrentDownloads      int
+	MaxConcurrentDownloadsPerIP int
+	Build                       BuildInfo
+	AppTokens                   map[string]string
 }
 
 type downloadLimiter struct {
-	sem chan struct{}
+	sem *semaphore.Weighted
 }
 
 func newDownloadLimiter(limit int) *downloadLimiter {
 	if limit <= 0 {
 		limit = defaultMaxConcurrentDownloads
 	}
-	return &downloadLimiter{sem: make(chan struct{}, limit)}
+	return &downloadLimiter{sem: semaphore.NewWeighted(int64(limit))}
 }
 
 func (l *downloadLimiter) acquire() bool {
-	select {
-	case l.sem <- struct{}{}:
-		return true
-	default:
-		return false
-	}
+	return l.sem.TryAcquire(1)
 }
 
 func (l *downloadLimiter) release() {
-	select {
-	case <-l.sem:
-	default:
+	l.sem.Release(1)
+}
+
+type clientDownloadLimiter struct {
+	limit   int
+	mu      sync.Mutex
+	clients map[string]*downloadLimiter
+	active  map[string]int
+}
+
+func newClientDownloadLimiter(limit int) *clientDownloadLimiter {
+	if limit <= 0 {
+		limit = defaultMaxConcurrentDownloadsPerIP
 	}
+	return &clientDownloadLimiter{
+		limit:   limit,
+		clients: make(map[string]*downloadLimiter),
+		active:  make(map[string]int),
+	}
+}
+
+func (l *clientDownloadLimiter) acquire(clientID string) bool {
+	if clientID == "" {
+		clientID = "unknown"
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	clientLimiter := l.clients[clientID]
+	if clientLimiter == nil {
+		clientLimiter = newDownloadLimiter(l.limit)
+		l.clients[clientID] = clientLimiter
+	}
+	if !clientLimiter.acquire() {
+		return false
+	}
+	l.active[clientID]++
+	return true
+}
+
+func (l *clientDownloadLimiter) release(clientID string) {
+	if clientID == "" {
+		clientID = "unknown"
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	clientLimiter := l.clients[clientID]
+	if clientLimiter != nil {
+		clientLimiter.release()
+	}
+	if l.active[clientID] <= 1 {
+		delete(l.active, clientID)
+		delete(l.clients, clientID)
+		return
+	}
+	l.active[clientID]--
 }
 
 func SetupRouter(updateDir string) *gin.Engine {
@@ -78,10 +128,11 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	state := routerState{
-		updateDir: opts.UpdateDir,
-		limiter:   newDownloadLimiter(opts.MaxConcurrentDownloads),
-		build:     opts.Build,
-		appTokens: opts.AppTokens,
+		updateDir:     opts.UpdateDir,
+		limiter:       newDownloadLimiter(opts.MaxConcurrentDownloads),
+		clientLimiter: newClientDownloadLimiter(opts.MaxConcurrentDownloadsPerIP),
+		build:         opts.Build,
+		appTokens:     opts.AppTokens,
 	}
 
 	r.GET("/healthz", state.healthz)
@@ -96,10 +147,11 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 }
 
 type routerState struct {
-	updateDir string
-	limiter   *downloadLimiter
-	build     BuildInfo
-	appTokens map[string]string
+	updateDir     string
+	limiter       *downloadLimiter
+	clientLimiter *clientDownloadLimiter
+	build         BuildInfo
+	appTokens     map[string]string
 }
 
 func (s routerState) healthz(c *gin.Context) {
@@ -186,6 +238,13 @@ func (s routerState) getUpdateList(c *gin.Context) {
 }
 
 func (s routerState) download(c *gin.Context) {
+	clientIP := c.ClientIP()
+	if !s.clientLimiter.acquire(clientIP) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"ret": "error", "error": "too many concurrent downloads from this client"})
+		return
+	}
+	defer s.clientLimiter.release(clientIP)
+
 	if !s.limiter.acquire() {
 		c.JSON(http.StatusTooManyRequests, gin.H{"ret": "error", "error": "too many concurrent downloads"})
 		return

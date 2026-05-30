@@ -282,6 +282,23 @@ func TestDownloadLimiter(t *testing.T) {
 	}
 }
 
+func TestClientDownloadLimiter(t *testing.T) {
+	limiter := newClientDownloadLimiter(1)
+	if !limiter.acquire("192.0.2.1") {
+		t.Fatalf("first acquire failed")
+	}
+	if limiter.acquire("192.0.2.1") {
+		t.Fatalf("second acquire for same client succeeded, want limited")
+	}
+	if !limiter.acquire("192.0.2.2") {
+		t.Fatalf("different client acquire failed")
+	}
+	limiter.release("192.0.2.1")
+	if !limiter.acquire("192.0.2.1") {
+		t.Fatalf("acquire after release failed")
+	}
+}
+
 func createDownloadFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

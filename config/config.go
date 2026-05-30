@@ -11,35 +11,38 @@ import (
 )
 
 const (
-	DefaultUpdateInterval         = 5 * time.Minute
-	DefaultServerPort             = ":8090"
-	DefaultReadTimeout            = 15 * time.Second
-	DefaultWriteTimeout           = 10 * time.Minute
-	DefaultIdleTimeout            = 60 * time.Second
-	DefaultMaxConcurrentDownloads = 64
-	DefaultConfigFileName         = "config.json"
+	DefaultUpdateInterval              = 5 * time.Minute
+	DefaultServerPort                  = ":8090"
+	DefaultReadTimeout                 = 15 * time.Second
+	DefaultWriteTimeout                = 10 * time.Minute
+	DefaultIdleTimeout                 = 60 * time.Second
+	DefaultMaxConcurrentDownloads      = 64
+	DefaultMaxConcurrentDownloadsPerIP = 8
+	DefaultConfigFileName              = "config.json"
 )
 
 type Config struct {
-	Port                   string        `json:"port"`
-	UpdateDir              string        `json:"updateDir"`
-	ScanInterval           time.Duration `json:"scanInterval"`
-	ReadTimeout            time.Duration `json:"readTimeout"`
-	WriteTimeout           time.Duration `json:"writeTimeout"`
-	IdleTimeout            time.Duration `json:"idleTimeout"`
-	MaxConcurrentDownloads int           `json:"maxConcurrentDownloads"`
-	AppTokens              map[string]string
+	Port                        string        `json:"port"`
+	UpdateDir                   string        `json:"updateDir"`
+	ScanInterval                time.Duration `json:"scanInterval"`
+	ReadTimeout                 time.Duration `json:"readTimeout"`
+	WriteTimeout                time.Duration `json:"writeTimeout"`
+	IdleTimeout                 time.Duration `json:"idleTimeout"`
+	MaxConcurrentDownloads      int           `json:"maxConcurrentDownloads"`
+	MaxConcurrentDownloadsPerIP int           `json:"maxConcurrentDownloadsPerIP"`
+	AppTokens                   map[string]string
 }
 
 type FileConfig struct {
-	Port                   *string           `json:"port"`
-	UpdateDir              *string           `json:"updateDir"`
-	ScanIntervalSeconds    *int              `json:"scanIntervalSeconds"`
-	ReadTimeoutSeconds     *int              `json:"readTimeoutSeconds"`
-	WriteTimeoutSeconds    *int              `json:"writeTimeoutSeconds"`
-	IdleTimeoutSeconds     *int              `json:"idleTimeoutSeconds"`
-	MaxConcurrentDownloads *int              `json:"maxConcurrentDownloads"`
-	AppTokens              map[string]string `json:"appTokens"`
+	Port                        *string           `json:"port"`
+	UpdateDir                   *string           `json:"updateDir"`
+	ScanIntervalSeconds         *int              `json:"scanIntervalSeconds"`
+	ReadTimeoutSeconds          *int              `json:"readTimeoutSeconds"`
+	WriteTimeoutSeconds         *int              `json:"writeTimeoutSeconds"`
+	IdleTimeoutSeconds          *int              `json:"idleTimeoutSeconds"`
+	MaxConcurrentDownloads      *int              `json:"maxConcurrentDownloads"`
+	MaxConcurrentDownloadsPerIP *int              `json:"maxConcurrentDownloadsPerIP"`
+	AppTokens                   map[string]string `json:"appTokens"`
 }
 
 func Load(workDir string) (Config, error) {
@@ -62,13 +65,14 @@ func defaultConfig(workDir string) (Config, error) {
 		return Config{}, err
 	}
 	return Config{
-		Port:                   DefaultServerPort,
-		UpdateDir:              updateDir,
-		ScanInterval:           DefaultUpdateInterval,
-		ReadTimeout:            DefaultReadTimeout,
-		WriteTimeout:           DefaultWriteTimeout,
-		IdleTimeout:            DefaultIdleTimeout,
-		MaxConcurrentDownloads: DefaultMaxConcurrentDownloads,
+		Port:                        DefaultServerPort,
+		UpdateDir:                   updateDir,
+		ScanInterval:                DefaultUpdateInterval,
+		ReadTimeout:                 DefaultReadTimeout,
+		WriteTimeout:                DefaultWriteTimeout,
+		IdleTimeout:                 DefaultIdleTimeout,
+		MaxConcurrentDownloads:      DefaultMaxConcurrentDownloads,
+		MaxConcurrentDownloadsPerIP: DefaultMaxConcurrentDownloadsPerIP,
 	}, nil
 }
 
@@ -148,6 +152,9 @@ func applyFileConfig(cfg *Config, workDir string, fileCfg FileConfig) error {
 	if fileCfg.MaxConcurrentDownloads != nil && *fileCfg.MaxConcurrentDownloads > 0 {
 		cfg.MaxConcurrentDownloads = *fileCfg.MaxConcurrentDownloads
 	}
+	if fileCfg.MaxConcurrentDownloadsPerIP != nil && *fileCfg.MaxConcurrentDownloadsPerIP > 0 {
+		cfg.MaxConcurrentDownloadsPerIP = *fileCfg.MaxConcurrentDownloadsPerIP
+	}
 	if len(fileCfg.AppTokens) > 0 {
 		cfg.AppTokens = cleanAppTokens(fileCfg.AppTokens)
 	}
@@ -166,6 +173,7 @@ func applyEnvOverrides(cfg *Config, workDir string) error {
 	cfg.WriteTimeout = GetDurationFromEnv("GENUPDATE_WRITE_TIMEOUT_SECONDS", cfg.WriteTimeout)
 	cfg.IdleTimeout = GetDurationFromEnv("GENUPDATE_IDLE_TIMEOUT_SECONDS", cfg.IdleTimeout)
 	cfg.MaxConcurrentDownloads = GetIntFromEnv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", cfg.MaxConcurrentDownloads)
+	cfg.MaxConcurrentDownloadsPerIP = GetIntFromEnv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP", cfg.MaxConcurrentDownloadsPerIP)
 	if appTokens := GetAppTokensFromEnv("GENUPDATE_APP_TOKENS"); len(appTokens) > 0 {
 		cfg.AppTokens = appTokens
 	}

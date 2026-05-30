@@ -6,6 +6,7 @@
   "writeTimeoutSeconds": 600,
   "idleTimeoutSeconds": 60,
   "maxConcurrentDownloads": 64,
+  "maxConcurrentDownloadsPerIP": 8,
   "appTokens": {
     "cc": "replace-with-generated-token",
     "bb": "replace-with-generated-token"
