@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestResolveDownloadPath(t *testing.T) {
@@ -265,6 +266,74 @@ func TestWebIndexAndAppsAPI(t *testing.T) {
 	}
 	if body := rec.Body.String(); !containsAll(body, `"ret":"ok"`, `"totalApps":1`, `"fileName":"app"`, `"downloadURL":"/download/app/file.txt"`) {
 		t.Fatalf("apps body missing expected content: %s", body)
+	}
+}
+
+func TestWebPasswordProtectsIndexAndAppsAPI(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := createDownloadFixture(t)
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
+	router := SetupRouterWithOptions(Options{
+		UpdateDir:        root,
+		WebPasswordHash:  string(hash),
+		WebSessionSecret: "test-session-secret",
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login page status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !containsAll(body, "loginPassword", "/api/web-login") || strings.Contains(body, "/api/apps") {
+		t.Fatalf("login page body unexpected: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("apps status = %d, want 401", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, `"fileName":"app"`) {
+		t.Fatalf("unauthorized apps response leaked app list: %s", body)
+	}
+
+	badLogin := httptest.NewRequest(http.MethodPost, "/api/web-login", strings.NewReader("password=wrong"))
+	badLogin.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, badLogin)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad login status = %d, want 401", rec.Code)
+	}
+
+	goodLogin := httptest.NewRequest(http.MethodPost, "/api/web-login", strings.NewReader("password=secret"))
+	goodLogin.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, goodLogin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("good login status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("login did not set cookie")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authorized apps status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"fileName":"app"`) {
+		t.Fatalf("authorized apps body missing app list: %s", body)
 	}
 }
 

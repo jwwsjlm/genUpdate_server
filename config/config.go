@@ -31,6 +31,8 @@ type Config struct {
 	MaxConcurrentDownloads      int           `json:"maxConcurrentDownloads"`
 	MaxConcurrentDownloadsPerIP int           `json:"maxConcurrentDownloadsPerIP"`
 	AppTokens                   map[string]string
+	WebPasswordHash             string
+	WebSessionSecret            string
 }
 
 type FileConfig struct {
@@ -43,6 +45,8 @@ type FileConfig struct {
 	MaxConcurrentDownloads      *int              `json:"maxConcurrentDownloads"`
 	MaxConcurrentDownloadsPerIP *int              `json:"maxConcurrentDownloadsPerIP"`
 	AppTokens                   map[string]string `json:"appTokens"`
+	WebPasswordHash             *string           `json:"webPasswordHash"`
+	WebSessionSecret            *string           `json:"webSessionSecret"`
 }
 
 func Load(workDir string) (Config, error) {
@@ -158,6 +162,12 @@ func applyFileConfig(cfg *Config, workDir string, fileCfg FileConfig) error {
 	if len(fileCfg.AppTokens) > 0 {
 		cfg.AppTokens = cleanAppTokens(fileCfg.AppTokens)
 	}
+	if fileCfg.WebPasswordHash != nil {
+		cfg.WebPasswordHash = strings.TrimSpace(*fileCfg.WebPasswordHash)
+	}
+	if fileCfg.WebSessionSecret != nil {
+		cfg.WebSessionSecret = strings.TrimSpace(*fileCfg.WebSessionSecret)
+	}
 	return nil
 }
 
@@ -176,6 +186,12 @@ func applyEnvOverrides(cfg *Config, workDir string) error {
 	cfg.MaxConcurrentDownloadsPerIP = GetIntFromEnv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP", cfg.MaxConcurrentDownloadsPerIP)
 	if appTokens := GetAppTokensFromEnv("GENUPDATE_APP_TOKENS"); len(appTokens) > 0 {
 		cfg.AppTokens = appTokens
+	}
+	if value := strings.TrimSpace(os.Getenv("GENUPDATE_WEB_PASSWORD_HASH")); value != "" {
+		cfg.WebPasswordHash = value
+	}
+	if value := strings.TrimSpace(os.Getenv("GENUPDATE_WEB_SESSION_SECRET")); value != "" {
+		cfg.WebSessionSecret = value
 	}
 	return nil
 }

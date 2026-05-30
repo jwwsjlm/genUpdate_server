@@ -173,6 +173,8 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
   "idleTimeoutSeconds": 60,
   "maxConcurrentDownloads": 64,
   "maxConcurrentDownloadsPerIP": 8,
+  "webPasswordHash": "$2a$10$replace-with-bcrypt-hash",
+  "webSessionSecret": "replace-with-random-session-secret",
   "appTokens": {
     "cc": "cc-token",
     "bb": "bb-token"
@@ -196,6 +198,8 @@ curl -L "http://localhost:8090/download/星月/qqwry.dat" -o qqwry.dat
 | `GENUPDATE_MAX_CONCURRENT_DOWNLOADS` | `64` | 最大并发下载数 |
 | `GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP` | `8` | 单个客户端 IP 最大并发下载数 |
 | `GENUPDATE_APP_TOKENS` | 空 | 按软件授权的 token 映射，例如 `cc=cc-token,bb=bb-token` |
+| `GENUPDATE_WEB_PASSWORD_HASH` | 空 | Web 管理页面 bcrypt 密码哈希；配置后访问 Web 和 `/api/apps` 需要登录 |
+| `GENUPDATE_WEB_SESSION_SECRET` | `GENUPDATE_WEB_PASSWORD_HASH` | Web 登录 cookie 签名密钥，建议使用随机长字符串 |
 
 ---
 
@@ -268,6 +272,7 @@ update/
 - 下载接口只服务当前清单中的文件，`jsonBody.json`、`manifest-cache.json`、`.ignore`、`ReleaseNote.txt` 等内部文件即使存在也不能通过 `/download/*` 下载。
 - 扫描时默认跳过隐藏文件和隐藏目录，例如 `.env`、`.secret/`，避免敏感文件误进入更新清单。
 - 如需私有分发，可配置 `GENUPDATE_APP_TOKENS`。配置后，客户端必须通过 `Authorization: Bearer <token>` 或 `X-Update-Token: <token>` 访问对应软件；错误 token 会返回 404，避免暴露其他软件名称。
+- 如需保护 Web 管理页面和 `/api/apps`，可配置 `GENUPDATE_WEB_PASSWORD_HASH`。密码使用 bcrypt 哈希保存，bcrypt 自带 salt，不需要保存明文密码。
 - 服务使用 Go 官方 `golang.org/x/sync/semaphore` 限制全局并发下载数和单 IP 并发下载数，避免单个客户端多线程下载占满服务端连接。
 - 对外部署时建议只把可公开分发的更新包放进 `update` 目录，并在反向代理层启用 HTTPS、访问日志、限速和必要的鉴权策略。
 
@@ -282,6 +287,14 @@ curl -H "Authorization: Bearer cc-secret" http://localhost:8090/download/cc/app.
 此时即使用户猜到 `bb`，使用 `cc-secret` 访问 `/updateList/bb` 或 `/download/bb/...` 也只会得到 404。
 
 Web 更新中心提供本地随机 Token 生成按钮，生成逻辑在浏览器内完成，服务端不会保存或记录该 Token。
+
+生成 Web 管理密码哈希：
+
+```bash
+genupdate-server hash-password "your-admin-password"
+```
+
+将输出写入 `GENUPDATE_WEB_PASSWORD_HASH` 或 `config.json` 的 `webPasswordHash`。
 
 ---
 

@@ -1,5 +1,56 @@
 package route
 
+const loginHTML = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenUpdate Login</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif; --bg: #f6f7f9; --panel: #fff; --text: #1f2937; --muted: #6b7280; --line: #d9dee7; --accent: #0f766e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); padding: 20px; }
+    main { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 24px; box-shadow: 0 18px 46px rgba(31, 41, 55, .08); }
+    h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: 0; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+    label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+    input { width: 100%; height: 42px; border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; font: inherit; outline: none; }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
+    button { width: 100%; height: 42px; margin-top: 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+    .error { min-height: 20px; color: #b45309; font-size: 13px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GenUpdate</h1>
+    <div class="sub">Web Console</div>
+    <form id="loginForm">
+      <label for="loginPassword">Password</label>
+      <input id="loginPassword" name="password" type="password" autocomplete="current-password" autofocus>
+      <button type="submit">Login</button>
+      <div class="error" id="loginError"></div>
+    </form>
+  </main>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = new URLSearchParams();
+      body.set("password", document.getElementById("loginPassword").value);
+      const response = await fetch("/api/web-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+      });
+      if (response.ok) {
+        location.reload();
+        return;
+      }
+      document.getElementById("loginError").textContent = "Login failed";
+    });
+  </script>
+</body>
+</html>`
+
 const indexHTML = `<!doctype html>
 <html lang="zh-CN">
 <head>

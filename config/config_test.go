@@ -119,6 +119,8 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 		"idleTimeoutSeconds": 5,
 		"maxConcurrentDownloads": 6,
 		"maxConcurrentDownloadsPerIP": 2,
+		"webPasswordHash": "$2a$10$example",
+		"webSessionSecret": "session-secret",
 		"appTokens": {
 			"cc": "file-token"
 		}
@@ -150,6 +152,9 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 	if cfg.AppTokens["cc"] != "file-token" {
 		t.Fatalf("app tokens = %#v", cfg.AppTokens)
 	}
+	if cfg.WebPasswordHash != "$2a$10$example" || cfg.WebSessionSecret != "session-secret" {
+		t.Fatalf("web auth config = hash %q secret %q", cfg.WebPasswordHash, cfg.WebSessionSecret)
+	}
 }
 
 func TestLoadEnvOverridesConfigFile(t *testing.T) {
@@ -168,6 +173,8 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS", "9")
 	t.Setenv("GENUPDATE_MAX_CONCURRENT_DOWNLOADS_PER_IP", "4")
 	t.Setenv("GENUPDATE_APP_TOKENS", "cc=env-token")
+	t.Setenv("GENUPDATE_WEB_PASSWORD_HASH", "$2a$10$env")
+	t.Setenv("GENUPDATE_WEB_SESSION_SECRET", "env-session-secret")
 
 	cfg, err := Load(workDir)
 	if err != nil {
@@ -184,6 +191,9 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	}
 	if cfg.AppTokens["cc"] != "env-token" {
 		t.Fatalf("app tokens = %#v", cfg.AppTokens)
+	}
+	if cfg.WebPasswordHash != "$2a$10$env" || cfg.WebSessionSecret != "env-session-secret" {
+		t.Fatalf("web auth config = hash %q secret %q", cfg.WebPasswordHash, cfg.WebSessionSecret)
 	}
 }
 

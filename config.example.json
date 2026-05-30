@@ -7,6 +7,8 @@
   "idleTimeoutSeconds": 60,
   "maxConcurrentDownloads": 64,
   "maxConcurrentDownloadsPerIP": 8,
+  "webPasswordHash": "$2a$10$replace-with-bcrypt-hash",
+  "webSessionSecret": "replace-with-random-session-secret",
   "appTokens": {
     "cc": "replace-with-generated-token",
     "bb": "replace-with-generated-token"

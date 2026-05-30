@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"github.com/jwwsjlm/genUpdate_server/route"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -25,6 +27,10 @@ func init() {
 }
 
 func main() {
+	if handleCLI(os.Args) {
+		return
+	}
+
 	setupLogger()
 	defer closeLogger()
 
@@ -46,6 +52,23 @@ func main() {
 
 	auth.Infof("server starting on %s, update dir: %s, scan interval: %s", cfg.Port, cfg.UpdateDir, cfg.ScanInterval)
 	startServer(cfg)
+}
+
+func handleCLI(args []string) bool {
+	if len(args) < 2 || args[1] != "hash-password" {
+		return false
+	}
+	if len(args) < 3 {
+		_, _ = fmt.Fprintln(os.Stderr, "usage: genupdate-server hash-password <password>")
+		os.Exit(2)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(args[2]), bcrypt.DefaultCost)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to hash password: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(hash))
+	return true
 }
 
 func setupLogger() {
@@ -92,6 +115,8 @@ func startServer(cfg config.Config) {
 			MaxConcurrentDownloads:      cfg.MaxConcurrentDownloads,
 			MaxConcurrentDownloadsPerIP: cfg.MaxConcurrentDownloadsPerIP,
 			AppTokens:                   cfg.AppTokens,
+			WebPasswordHash:             cfg.WebPasswordHash,
+			WebSessionSecret:            cfg.WebSessionSecret,
 			Build: route.BuildInfo{
 				Version:   version,
 				Commit:    commit,

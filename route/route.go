@@ -1,8 +1,10 @@
 package route
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +21,7 @@ import (
 	"github.com/jwwsjlm/genUpdate_server/auth"
 	"github.com/jwwsjlm/genUpdate_server/fileutils"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -25,9 +29,12 @@ const (
 	defaultMaxConcurrentDownloads      = 64
 	defaultMaxConcurrentDownloadsPerIP = 8
 	manifestCacheMaxAge                = "60s"
+	webSessionCookieName               = "genupdate_web_session"
 )
 
 var errInvalidDownloadPath = errors.New("invalid download path")
+
+var webSessionTTL = 12 * time.Hour
 
 type BuildInfo struct {
 	Version   string `json:"version"`
@@ -41,6 +48,8 @@ type Options struct {
 	MaxConcurrentDownloadsPerIP int
 	Build                       BuildInfo
 	AppTokens                   map[string]string
+	WebPasswordHash             string
+	WebSessionSecret            string
 }
 
 type downloadLimiter struct {
@@ -128,16 +137,20 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	state := routerState{
-		updateDir:     opts.UpdateDir,
-		limiter:       newDownloadLimiter(opts.MaxConcurrentDownloads),
-		clientLimiter: newClientDownloadLimiter(opts.MaxConcurrentDownloadsPerIP),
-		build:         opts.Build,
-		appTokens:     opts.AppTokens,
+		updateDir:        opts.UpdateDir,
+		limiter:          newDownloadLimiter(opts.MaxConcurrentDownloads),
+		clientLimiter:    newClientDownloadLimiter(opts.MaxConcurrentDownloadsPerIP),
+		build:            opts.Build,
+		appTokens:        opts.AppTokens,
+		webPasswordHash:  strings.TrimSpace(opts.WebPasswordHash),
+		webSessionSecret: strings.TrimSpace(opts.WebSessionSecret),
 	}
 
 	r.GET("/healthz", state.healthz)
 	r.GET("/version", state.version)
 	r.GET("/", state.index)
+	r.POST("/api/web-login", state.webLogin)
+	r.POST("/api/web-logout", state.webLogout)
 	r.GET("/api/apps", state.apps)
 	r.GET("/updateList/:filename", state.getUpdateList)
 	r.GET("/download/*filepath", state.download)
@@ -147,11 +160,13 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 }
 
 type routerState struct {
-	updateDir     string
-	limiter       *downloadLimiter
-	clientLimiter *clientDownloadLimiter
-	build         BuildInfo
-	appTokens     map[string]string
+	updateDir        string
+	limiter          *downloadLimiter
+	clientLimiter    *clientDownloadLimiter
+	build            BuildInfo
+	appTokens        map[string]string
+	webPasswordHash  string
+	webSessionSecret string
 }
 
 func (s routerState) healthz(c *gin.Context) {
@@ -184,11 +199,19 @@ func (s routerState) version(c *gin.Context) {
 
 func (s routerState) apps(c *gin.Context) {
 	lists := fileutils.GetAllLists()
-	lists, ok := s.filterAuthorizedLists(c, lists)
-	if !ok {
-		c.Header("Cache-Control", "no-store")
-		c.JSON(http.StatusUnauthorized, gin.H{"ret": "error", "error": "unauthorized"})
-		return
+	if !s.isWebSessionValid(c) {
+		if s.webAuthEnabled() && len(s.appTokens) == 0 {
+			c.Header("Cache-Control", "no-store")
+			c.JSON(http.StatusUnauthorized, gin.H{"ret": "error", "error": "unauthorized"})
+			return
+		}
+		var ok bool
+		lists, ok = s.filterAuthorizedLists(c, lists)
+		if !ok {
+			c.Header("Cache-Control", "no-store")
+			c.JSON(http.StatusUnauthorized, gin.H{"ret": "error", "error": "unauthorized"})
+			return
+		}
 	}
 
 	totalFiles := 0
@@ -200,7 +223,7 @@ func (s routerState) apps(c *gin.Context) {
 		}
 	}
 
-	if len(s.appTokens) == 0 {
+	if len(s.appTokens) == 0 && !s.webAuthEnabled() {
 		c.Header("Cache-Control", "public, max-age=60")
 	} else {
 		c.Header("Cache-Control", "private, no-store")
@@ -216,7 +239,48 @@ func (s routerState) apps(c *gin.Context) {
 
 func (s routerState) index(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
+	if s.webAuthEnabled() && !s.isWebSessionValid(c) {
+		c.String(http.StatusOK, loginHTML)
+		return
+	}
 	c.String(http.StatusOK, indexHTML)
+}
+
+type webLoginRequest struct {
+	Password string `json:"password" form:"password"`
+}
+
+func (s routerState) webLogin(c *gin.Context) {
+	if !s.webAuthEnabled() {
+		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "not found"})
+		return
+	}
+	var req webLoginRequest
+	if err := c.ShouldBind(&req); err != nil || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ret": "error", "error": "password required"})
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(s.webPasswordHash), []byte(req.Password)); err != nil {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusUnauthorized, gin.H{"ret": "error", "error": "unauthorized"})
+		return
+	}
+	http.SetCookie(c.Writer, s.newWebSessionCookie(c, time.Now()))
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"ret": "ok"})
+}
+
+func (s routerState) webLogout(c *gin.Context) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     webSessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   c.Request.TLS != nil,
+	})
+	c.JSON(http.StatusOK, gin.H{"ret": "ok"})
 }
 
 func (s routerState) getUpdateList(c *gin.Context) {
@@ -308,6 +372,9 @@ func (s routerState) filterAuthorizedLists(c *gin.Context, lists []fileutils.Fil
 }
 
 func (s routerState) authorizeApp(c *gin.Context, appName string) bool {
+	if s.isWebSessionValid(c) {
+		return true
+	}
 	if len(s.appTokens) == 0 {
 		return true
 	}
@@ -336,6 +403,60 @@ func requestToken(c *gin.Context) string {
 func appNameFromCleanPath(cleanPath string) string {
 	appName, _, _ := strings.Cut(cleanPath, "/")
 	return appName
+}
+
+func (s routerState) webAuthEnabled() bool {
+	return s.webPasswordHash != ""
+}
+
+func (s routerState) newWebSessionCookie(c *gin.Context, now time.Time) *http.Cookie {
+	issuedAt := strconv.FormatInt(now.Unix(), 10)
+	return &http.Cookie{
+		Name:     webSessionCookieName,
+		Value:    issuedAt + "." + s.signWebSession(issuedAt),
+		Path:     "/",
+		MaxAge:   int(webSessionTTL.Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   c.Request.TLS != nil,
+	}
+}
+
+func (s routerState) isWebSessionValid(c *gin.Context) bool {
+	if !s.webAuthEnabled() {
+		return false
+	}
+	cookie, err := c.Request.Cookie(webSessionCookieName)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	issuedAt, signature, ok := strings.Cut(cookie.Value, ".")
+	if !ok || issuedAt == "" || signature == "" {
+		return false
+	}
+	unixTime, err := strconv.ParseInt(issuedAt, 10, 64)
+	if err != nil {
+		return false
+	}
+	issued := time.Unix(unixTime, 0)
+	if time.Since(issued) < 0 || time.Since(issued) > webSessionTTL {
+		return false
+	}
+	expected := s.signWebSession(issuedAt)
+	return hmac.Equal([]byte(signature), []byte(expected))
+}
+
+func (s routerState) signWebSession(value string) string {
+	mac := hmac.New(sha256.New, []byte(s.webSessionSecretOrFallback()))
+	_, _ = mac.Write([]byte(value))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (s routerState) webSessionSecretOrFallback() string {
+	if s.webSessionSecret != "" {
+		return s.webSessionSecret
+	}
+	return s.webPasswordHash
 }
 
 func resolveDownloadPath(rootDir, requestPath string) (string, string, error) {
