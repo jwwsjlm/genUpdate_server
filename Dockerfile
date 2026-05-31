@@ -16,7 +16,7 @@ ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" -o /out/genupdate-server ./cmd/main
 
-FROM alpine:3.22
+FROM alpine:3.23
 
 RUN addgroup -S app \
     && adduser -S -G app app \
