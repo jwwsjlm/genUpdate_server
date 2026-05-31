@@ -337,6 +337,38 @@ func TestWebPasswordProtectsIndexAndAppsAPI(t *testing.T) {
 	}
 }
 
+func TestWebLoginRateLimit(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := createDownloadFixture(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
+	router := SetupRouterWithOptions(Options{
+		UpdateDir:        root,
+		WebPasswordHash:  string(hash),
+		WebSessionSecret: "test-session-secret",
+	})
+
+	for i := 0; i < defaultWebLoginAttemptsPerMinute; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/web-login", strings.NewReader("password=wrong"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want 401", i+1, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/web-login", strings.NewReader("password=wrong"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate limited status = %d, want 429", rec.Code)
+	}
+}
+
 func TestDownloadLimiter(t *testing.T) {
 	limiter := newDownloadLimiter(1)
 	if !limiter.acquire() {

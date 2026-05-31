@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	listJSON = make(map[string]FileList)
-	mu       sync.RWMutex
+	listJSON      = make(map[string]FileList)
+	filePathIndex = make(map[string]struct{})
+	mu            sync.RWMutex
 )
 
 type cachedFileMeta struct {
@@ -61,14 +62,8 @@ func HasFilePath(path string) bool {
 
 	mu.RLock()
 	defer mu.RUnlock()
-	for _, fileInfo := range listJSON {
-		for _, f := range fileInfo.Files {
-			if f.Path == cleanPath {
-				return true
-			}
-		}
-	}
-	return false
+	_, ok := filePathIndex[cleanPath]
+	return ok
 }
 
 func GetJSONText() (string, error) {
@@ -99,8 +94,21 @@ func InitListUpdate(ignoreFilePath, rootDir string) error {
 
 	mu.Lock()
 	listJSON = newList
+	filePathIndex = buildFilePathIndex(newList)
 	mu.Unlock()
 	return nil
+}
+
+func buildFilePathIndex(lists map[string]FileList) map[string]struct{} {
+	index := make(map[string]struct{})
+	for _, fileInfo := range lists {
+		for _, f := range fileInfo.Files {
+			if f.Path != "" {
+				index[f.Path] = struct{}{}
+			}
+		}
+	}
+	return index
 }
 
 func writeJSONFile(path string, list map[string]FileList) error {

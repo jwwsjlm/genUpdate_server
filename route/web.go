@@ -5,7 +5,7 @@ const loginHTML = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GenUpdate Login</title>
+  <title>GenUpdate 登录</title>
   <style>
     :root { color-scheme: light; font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif; --bg: #f6f7f9; --panel: #fff; --text: #1f2937; --muted: #6b7280; --line: #d9dee7; --accent: #0f766e; }
     * { box-sizing: border-box; }
@@ -23,11 +23,11 @@ const loginHTML = `<!doctype html>
 <body>
   <main>
     <h1>GenUpdate</h1>
-    <div class="sub">Web Console</div>
+    <div class="sub">Web 管理页面</div>
     <form id="loginForm">
-      <label for="loginPassword">Password</label>
+      <label for="loginPassword">管理密码</label>
       <input id="loginPassword" name="password" type="password" autocomplete="current-password" autofocus>
-      <button type="submit">Login</button>
+      <button type="submit">登录</button>
       <div class="error" id="loginError"></div>
     </form>
   </main>
@@ -45,7 +45,7 @@ const loginHTML = `<!doctype html>
         location.reload();
         return;
       }
-      document.getElementById("loginError").textContent = "Login failed";
+      document.getElementById("loginError").textContent = "登录失败，请检查密码";
     });
   </script>
 </body>
@@ -157,7 +157,7 @@ const indexHTML = `<!doctype html>
         <a class="btn primary" href="/version" target="_blank" rel="noreferrer">版本接口</a>
       </div>
     </header>
-    <section class="token-panel" id="tokenPanel" aria-label="Token generator" hidden>
+    <section class="token-panel" id="tokenPanel" aria-label="Token 生成器" hidden>
       <input id="tokenOutput" type="text" readonly spellcheck="false">
       <button class="btn primary" id="copyTokenBtn" type="button">复制</button>
       <div class="token-status" id="tokenStatus">32 bytes · base64url</div>

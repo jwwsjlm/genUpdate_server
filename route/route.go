@@ -23,11 +23,13 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 )
 
 const (
 	defaultMaxConcurrentDownloads      = 64
 	defaultMaxConcurrentDownloadsPerIP = 8
+	defaultWebLoginAttemptsPerMinute   = 5
 	manifestCacheMaxAge                = "60s"
 	webSessionCookieName               = "genupdate_web_session"
 )
@@ -76,6 +78,49 @@ type clientDownloadLimiter struct {
 	mu      sync.Mutex
 	clients map[string]*downloadLimiter
 	active  map[string]int
+}
+
+type loginRateLimiter struct {
+	mu        sync.Mutex
+	clients   map[string]*loginClientLimiter
+	lastSweep time.Time
+}
+
+type loginClientLimiter struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+func newLoginRateLimiter() *loginRateLimiter {
+	return &loginRateLimiter{clients: make(map[string]*loginClientLimiter)}
+}
+
+func (l *loginRateLimiter) allow(clientID string, now time.Time) bool {
+	if clientID == "" {
+		clientID = "unknown"
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if now.Sub(l.lastSweep) > time.Minute {
+		for key, client := range l.clients {
+			if now.Sub(client.lastSeen) > 30*time.Minute {
+				delete(l.clients, key)
+			}
+		}
+		l.lastSweep = now
+	}
+
+	client := l.clients[clientID]
+	if client == nil {
+		client = &loginClientLimiter{
+			limiter: rate.NewLimiter(rate.Every(time.Minute/defaultWebLoginAttemptsPerMinute), defaultWebLoginAttemptsPerMinute),
+		}
+		l.clients[clientID] = client
+	}
+	client.lastSeen = now
+	return client.limiter.Allow()
 }
 
 func newClientDownloadLimiter(limit int) *clientDownloadLimiter {
@@ -140,6 +185,7 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 		updateDir:        opts.UpdateDir,
 		limiter:          newDownloadLimiter(opts.MaxConcurrentDownloads),
 		clientLimiter:    newClientDownloadLimiter(opts.MaxConcurrentDownloadsPerIP),
+		loginLimiter:     newLoginRateLimiter(),
 		build:            opts.Build,
 		appTokens:        opts.AppTokens,
 		webPasswordHash:  strings.TrimSpace(opts.WebPasswordHash),
@@ -163,6 +209,7 @@ type routerState struct {
 	updateDir        string
 	limiter          *downloadLimiter
 	clientLimiter    *clientDownloadLimiter
+	loginLimiter     *loginRateLimiter
 	build            BuildInfo
 	appTokens        map[string]string
 	webPasswordHash  string
@@ -253,6 +300,11 @@ type webLoginRequest struct {
 func (s routerState) webLogin(c *gin.Context) {
 	if !s.webAuthEnabled() {
 		c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "not found"})
+		return
+	}
+	if !s.loginLimiter.allow(c.ClientIP(), time.Now()) {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusTooManyRequests, gin.H{"ret": "error", "error": "too many login attempts"})
 		return
 	}
 	var req webLoginRequest

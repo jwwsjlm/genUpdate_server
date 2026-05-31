@@ -15,7 +15,7 @@ var (
 	SugaredLogger *zap.SugaredLogger
 )
 
-// ParseLogLevel 解析日志级别字符串
+// ParseLogLevel 解析日志级别字符串。
 func ParseLogLevel(level string) (zapcore.Level, error) {
 	switch level {
 	case "debug":
@@ -37,11 +37,10 @@ func ParseLogLevel(level string) (zapcore.Level, error) {
 	}
 }
 
-// InitLogger 初始化日志记录器
+// InitLogger 初始化日志记录器。
 func InitLogger(logLevel zapcore.Level) {
 	encoder := getEncoder()
 
-	// 定义日志级别
 	infoLevel := zap.LevelEnablerFunc(func(lev zapcore.Level) bool {
 		return lev >= logLevel && lev < zap.ErrorLevel
 	})
@@ -49,28 +48,23 @@ func InitLogger(logLevel zapcore.Level) {
 		return lev >= zap.ErrorLevel
 	})
 
-	// 获取日志写入器
 	infoWriter := getInfoWriterSyncer()
 	errorWriter := getErrorWriterSyncer()
 
-	// 创建核心
 	infoCore := zapcore.NewCore(encoder, zapcore.NewMultiWriteSyncer(infoWriter, zapcore.AddSync(os.Stdout)), infoLevel)
 	errorCore := zapcore.NewCore(encoder, zapcore.NewMultiWriteSyncer(errorWriter, zapcore.AddSync(os.Stdout)), errorLevel)
-
-	// 合并核心
 	core := zapcore.NewTee(infoCore, errorCore)
 
-	// 创建日志记录器
 	Logger = zap.New(core, zap.AddCallerSkip(0), zap.AddStacktrace(zap.WarnLevel))
 	SugaredLogger = Logger.Sugar()
 }
 
-// 自定义时间编码器
+// timeEncoder 使用固定格式输出日志时间。
 func timeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(t.Format("2006-01-02 15:04:05.000"))
 }
 
-// 自定义日志级别编码器
+// levelEncoder 输出兼容现有日志格式的级别文本。
 func levelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	levelMap := map[zapcore.Level]string{
 		zapcore.DebugLevel:  "[DEBUG]",
@@ -84,7 +78,7 @@ func levelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(levelMap[l])
 }
 
-// NewEncoderConfig 创建编码器配置
+// NewEncoderConfig 创建日志编码配置。
 func NewEncoderConfig() zapcore.EncoderConfig {
 	return zapcore.EncoderConfig{
 		TimeKey:        "time",
@@ -102,12 +96,12 @@ func NewEncoderConfig() zapcore.EncoderConfig {
 	}
 }
 
-// getEncoder 获取 JSON 编码器
+// getEncoder 获取 JSON 编码器。
 func getEncoder() zapcore.Encoder {
 	return zapcore.NewJSONEncoder(NewEncoderConfig())
 }
 
-// getInfoWriterSyncer 获取 info 级别日志的写入器
+// getInfoWriterSyncer 获取 info 级别日志写入器。
 func getInfoWriterSyncer() zapcore.WriteSyncer {
 	return zapcore.AddSync(&lumberjack.Logger{
 		Filename:   "./log/info.log",
@@ -118,7 +112,7 @@ func getInfoWriterSyncer() zapcore.WriteSyncer {
 	})
 }
 
-// getErrorWriterSyncer 获取 error 级别日志的写入器
+// getErrorWriterSyncer 获取 error 级别日志写入器。
 func getErrorWriterSyncer() zapcore.WriteSyncer {
 	return zapcore.AddSync(&lumberjack.Logger{
 		Filename:   "./log/error.log",
@@ -128,8 +122,6 @@ func getErrorWriterSyncer() zapcore.WriteSyncer {
 		Compress:   false,
 	})
 }
-
-// 以下是日志记录的便捷方法
 
 func Debugf(format string, v ...interface{}) {
 	SugaredLogger.Debugf(format, v...)
