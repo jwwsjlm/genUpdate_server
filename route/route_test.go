@@ -1,6 +1,10 @@
 package route
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -216,6 +220,54 @@ func TestAppTokenScopesListsAndDownloads(t *testing.T) {
 			t.Fatalf("body = %q, want cc", got)
 		}
 	})
+}
+
+func TestUpdateListCanBeSigned(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	root := createDownloadFixture(t)
+	if err := fileutils.InitListUpdate(filepath.Join(root, ".ignore"), root); err != nil {
+		t.Fatalf("InitListUpdate() error = %v", err)
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey() error = %v", err)
+	}
+	router := SetupRouterWithOptions(Options{
+		UpdateDir:                 root,
+		ManifestSigningPrivateKey: base64.RawURLEncoding.EncodeToString(privateKey.Seed()),
+		ManifestSigningKeyID:      "test-key",
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/updateList/app", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Ret       string             `json:"ret"`
+		AppList   fileutils.FileList `json:"appList"`
+		Signature string             `json:"signature"`
+		Algorithm string             `json:"signatureAlgorithm"`
+		KeyID     string             `json:"signatureKeyID"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if response.Ret != "ok" || response.Signature == "" || response.Algorithm != "ed25519" || response.KeyID != "test-key" {
+		t.Fatalf("signed response missing fields: %+v", response)
+	}
+	payload, err := json.Marshal(response.AppList)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(response.Signature)
+	if err != nil {
+		t.Fatalf("DecodeString() error = %v", err)
+	}
+	if !ed25519.Verify(publicKey, payload, signature) {
+		t.Fatalf("signature verification failed")
+	}
 }
 
 func TestHealthAndVersion(t *testing.T) {

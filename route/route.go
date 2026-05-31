@@ -1,11 +1,13 @@
 package route
 
 import (
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -52,6 +54,21 @@ type Options struct {
 	AppTokens                   map[string]string
 	WebPasswordHash             string
 	WebSessionSecret            string
+	ManifestSigningPrivateKey   string
+	ManifestSigningKeyID        string
+}
+
+type manifestSigner struct {
+	privateKey ed25519.PrivateKey
+	keyID      string
+}
+
+type signedManifestResponse struct {
+	Ret       string             `json:"ret"`
+	AppList   fileutils.FileList `json:"appList"`
+	Signature string             `json:"signature,omitempty"`
+	Algorithm string             `json:"signatureAlgorithm,omitempty"`
+	KeyID     string             `json:"signatureKeyID,omitempty"`
 }
 
 type downloadLimiter struct {
@@ -186,6 +203,7 @@ func SetupRouterWithOptions(opts Options) *gin.Engine {
 		limiter:          newDownloadLimiter(opts.MaxConcurrentDownloads),
 		clientLimiter:    newClientDownloadLimiter(opts.MaxConcurrentDownloadsPerIP),
 		loginLimiter:     newLoginRateLimiter(),
+		manifestSigner:   newManifestSigner(opts.ManifestSigningPrivateKey, opts.ManifestSigningKeyID),
 		build:            opts.Build,
 		appTokens:        opts.AppTokens,
 		webPasswordHash:  strings.TrimSpace(opts.WebPasswordHash),
@@ -210,6 +228,7 @@ type routerState struct {
 	limiter          *downloadLimiter
 	clientLimiter    *clientDownloadLimiter
 	loginLimiter     *loginRateLimiter
+	manifestSigner   *manifestSigner
 	build            BuildInfo
 	appTokens        map[string]string
 	webPasswordHash  string
@@ -347,10 +366,32 @@ func (s routerState) getUpdateList(c *gin.Context) {
 		} else {
 			c.Header("Cache-Control", "private, no-store")
 		}
-		c.JSON(http.StatusOK, gin.H{"ret": "ok", "appList": f})
+		response, err := s.newManifestResponse(f)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ret": "error", "error": "failed to sign manifest"})
+			return
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
 	c.JSON(http.StatusNotFound, gin.H{"ret": "error", "error": "software not found"})
+}
+
+func (s routerState) newManifestResponse(list fileutils.FileList) (signedManifestResponse, error) {
+	response := signedManifestResponse{Ret: "ok", AppList: list}
+	if s.manifestSigner == nil {
+		return response, nil
+	}
+
+	payload, err := json.Marshal(list)
+	if err != nil {
+		return signedManifestResponse{}, err
+	}
+	signature := ed25519.Sign(s.manifestSigner.privateKey, payload)
+	response.Signature = base64.RawURLEncoding.EncodeToString(signature)
+	response.Algorithm = "ed25519"
+	response.KeyID = s.manifestSigner.keyID
+	return response, nil
 }
 
 func (s routerState) download(c *gin.Context) {
@@ -509,6 +550,48 @@ func (s routerState) webSessionSecretOrFallback() string {
 		return s.webSessionSecret
 	}
 	return s.webPasswordHash
+}
+
+func newManifestSigner(privateKeyText, keyID string) *manifestSigner {
+	privateKeyText = strings.TrimSpace(privateKeyText)
+	if privateKeyText == "" {
+		return nil
+	}
+
+	privateKeyBytes, err := decodeSigningPrivateKey(privateKeyText)
+	if err != nil {
+		auth.Panicf("invalid manifest signing private key: %v", err)
+	}
+	if len(privateKeyBytes) == ed25519.SeedSize {
+		privateKeyBytes = ed25519.NewKeyFromSeed(privateKeyBytes)
+	}
+	if len(privateKeyBytes) != ed25519.PrivateKeySize {
+		auth.Panicf("invalid manifest signing private key length: got %d bytes, want %d-byte seed or %d-byte private key", len(privateKeyBytes), ed25519.SeedSize, ed25519.PrivateKeySize)
+	}
+
+	keyID = strings.TrimSpace(keyID)
+	if keyID == "" {
+		sum := sha256.Sum256(privateKeyBytes[32:])
+		keyID = base64.RawURLEncoding.EncodeToString(sum[:8])
+	}
+
+	return &manifestSigner{
+		privateKey: ed25519.PrivateKey(privateKeyBytes),
+		keyID:      keyID,
+	}
+}
+
+func decodeSigningPrivateKey(value string) ([]byte, error) {
+	if decoded, err := base64.RawURLEncoding.DecodeString(value); err == nil {
+		return decoded, nil
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {
+		return decoded, nil
+	}
+	if decoded, err := hex.DecodeString(value); err == nil {
+		return decoded, nil
+	}
+	return nil, fmt.Errorf("expected base64url, base64, or hex encoded ed25519 key")
 }
 
 func resolveDownloadPath(rootDir, requestPath string) (string, string, error) {

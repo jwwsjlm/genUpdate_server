@@ -16,6 +16,7 @@
 - 私有分发：支持按软件配置 token，避免一个用户下载其他软件的文件。
 - Web 访问保护：支持 bcrypt 密码哈希保护 Web 页面和 `/api/apps`。
 - 登录限速：Web 登录接口使用 `golang.org/x/time/rate` 做单 IP 限速，降低密码爆破风险。
+- 更新清单签名：可用 Ed25519 私钥为 `/updateList/:app` 响应签名，方便客户端验证清单未被篡改。
 - 下载白名单：下载接口只允许访问已经进入更新清单的文件。
 - 断点续传：下载接口支持 `Range`、`HEAD`、`Accept-Ranges` 和 `ETag`。
 - 并发限制：支持全局下载并发和单 IP 下载并发限制。
@@ -148,6 +149,8 @@ update/
   "maxConcurrentDownloadsPerIP": 8,
   "webPasswordHash": "$2a$10$replace-with-bcrypt-hash",
   "webSessionSecret": "replace-with-random-session-secret",
+  "manifestSigningPrivateKey": "replace-with-generated-ed25519-private-seed",
+  "manifestSigningKeyID": "replace-with-signing-key-id",
   "appTokens": {
     "cc": "cc-token",
     "bb": "bb-token"
@@ -173,6 +176,8 @@ update/
 | `GENUPDATE_APP_TOKENS` | 空 | 按软件授权的 token 映射，例如 `cc=cc-token,bb=bb-token` |
 | `GENUPDATE_WEB_PASSWORD_HASH` | 空 | Web 管理页面 bcrypt 密码哈希；配置后访问 Web 和 `/api/apps` 需要登录 |
 | `GENUPDATE_WEB_SESSION_SECRET` | `GENUPDATE_WEB_PASSWORD_HASH` | Web 登录 cookie 签名密钥，建议使用随机长字符串 |
+| `GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY` | 空 | Ed25519 私钥种子或私钥，支持 base64url、base64、hex；配置后更新清单会带签名 |
+| `GENUPDATE_MANIFEST_SIGNING_KEY_ID` | 自动生成 | 清单签名 key id，方便客户端识别当前公钥 |
 
 ## Web 密码
 
@@ -185,6 +190,36 @@ genupdate-server hash-password "your-admin-password"
 将输出写入 `GENUPDATE_WEB_PASSWORD_HASH` 或 `config.json` 的 `webPasswordHash`。
 
 `webSessionSecret` 用于签名登录 cookie，不是登录密码，也不是 bcrypt salt。建议单独配置一个随机长字符串。更换后，旧的网页登录状态会失效，需要重新登录。
+
+## 更新清单签名
+
+生成 Ed25519 签名密钥：
+
+```bash
+genupdate-server generate-signing-key
+```
+
+输出示例：
+
+```text
+GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY=...
+GENUPDATE_MANIFEST_SIGNING_PUBLIC_KEY=...
+GENUPDATE_MANIFEST_SIGNING_KEY_ID=...
+```
+
+服务端只需要保存 `GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY` 和 `GENUPDATE_MANIFEST_SIGNING_KEY_ID`。客户端应内置或配置 `GENUPDATE_MANIFEST_SIGNING_PUBLIC_KEY`，用于验证 `/updateList/:app` 返回的签名。
+
+配置私钥后，更新清单会额外返回：
+
+```json
+{
+  "signature": "...",
+  "signatureAlgorithm": "ed25519",
+  "signatureKeyID": "..."
+}
+```
+
+未配置私钥时，接口保持旧响应格式，不影响现有客户端。
 
 ## API
 
@@ -292,6 +327,7 @@ X-Update-Token: cc-secret
 - Web 密码使用 bcrypt 哈希保存，bcrypt 自带 salt，不需要保存明文密码。
 - Web 登录 cookie 使用 HMAC-SHA256 签名，`webSessionSecret` 应使用随机长字符串。
 - Web 登录接口默认限制单 IP 每分钟 5 次尝试，超过后返回 429。
+- 建议启用更新清单签名，客户端验证签名后再下载和替换文件，降低清单被篡改的风险。
 - 服务使用 `golang.org/x/sync/semaphore` 限制全局并发下载数和单 IP 并发下载数，避免单个客户端多线程下载占满服务端连接。
 - 对外部署时建议只把可公开分发的更新包放进 `update` 目录，并在反向代理层启用 HTTPS、访问日志、限速和必要的鉴权策略。
 

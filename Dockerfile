@@ -20,6 +20,7 @@ FROM alpine:3.22
 
 RUN addgroup -S app \
     && adduser -S -G app app \
+    && apk add --no-cache wget \
     && mkdir -p /app/update /app/log \
     && touch /app/update/.ignore \
     && chown -R app:app /app
@@ -38,5 +39,8 @@ ENV GIN_MODE=release \
 EXPOSE 8090
 
 VOLUME ["/app/update", "/app/log"]
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -q -O - http://127.0.0.1:8090/healthz >/dev/null || exit 1
 
 ENTRYPOINT ["genupdate-server"]

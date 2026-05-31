@@ -9,6 +9,8 @@
   "maxConcurrentDownloadsPerIP": 8,
   "webPasswordHash": "$2a$10$replace-with-bcrypt-hash",
   "webSessionSecret": "replace-with-random-session-secret",
+  "manifestSigningPrivateKey": "replace-with-generated-ed25519-private-seed",
+  "manifestSigningKeyID": "replace-with-signing-key-id",
   "appTokens": {
     "cc": "replace-with-generated-token",
     "bb": "replace-with-generated-token"

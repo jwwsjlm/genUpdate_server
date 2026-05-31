@@ -1,6 +1,10 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -55,20 +59,37 @@ func main() {
 }
 
 func handleCLI(args []string) bool {
-	if len(args) < 2 || args[1] != "hash-password" {
+	if len(args) < 2 {
 		return false
 	}
-	if len(args) < 3 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: genupdate-server hash-password <password>")
-		os.Exit(2)
+	switch args[1] {
+	case "hash-password":
+		if len(args) < 3 {
+			_, _ = fmt.Fprintln(os.Stderr, "usage: genupdate-server hash-password <password>")
+			os.Exit(2)
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(args[2]), bcrypt.DefaultCost)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to hash password: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(hash))
+		return true
+	case "generate-signing-key":
+		_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "failed to generate signing key: %v\n", err)
+			os.Exit(1)
+		}
+		publicKey := privateKey.Public().(ed25519.PublicKey)
+		keyIDHash := sha256.Sum256(publicKey)
+		fmt.Println("GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY=" + base64.RawURLEncoding.EncodeToString(privateKey.Seed()))
+		fmt.Println("GENUPDATE_MANIFEST_SIGNING_PUBLIC_KEY=" + base64.RawURLEncoding.EncodeToString(publicKey))
+		fmt.Println("GENUPDATE_MANIFEST_SIGNING_KEY_ID=" + base64.RawURLEncoding.EncodeToString(keyIDHash[:8]))
+		return true
+	default:
+		return false
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(args[2]), bcrypt.DefaultCost)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to hash password: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println(string(hash))
-	return true
 }
 
 func setupLogger() {
@@ -117,6 +138,8 @@ func startServer(cfg config.Config) {
 			AppTokens:                   cfg.AppTokens,
 			WebPasswordHash:             cfg.WebPasswordHash,
 			WebSessionSecret:            cfg.WebSessionSecret,
+			ManifestSigningPrivateKey:   cfg.ManifestSigningPrivateKey,
+			ManifestSigningKeyID:        cfg.ManifestSigningKeyID,
 			Build: route.BuildInfo{
 				Version:   version,
 				Commit:    commit,

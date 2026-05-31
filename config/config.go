@@ -33,6 +33,8 @@ type Config struct {
 	AppTokens                   map[string]string
 	WebPasswordHash             string
 	WebSessionSecret            string
+	ManifestSigningPrivateKey   string
+	ManifestSigningKeyID        string
 }
 
 type FileConfig struct {
@@ -47,6 +49,8 @@ type FileConfig struct {
 	AppTokens                   map[string]string `json:"appTokens"`
 	WebPasswordHash             *string           `json:"webPasswordHash"`
 	WebSessionSecret            *string           `json:"webSessionSecret"`
+	ManifestSigningPrivateKey   *string           `json:"manifestSigningPrivateKey"`
+	ManifestSigningKeyID        *string           `json:"manifestSigningKeyID"`
 }
 
 func Load(workDir string) (Config, error) {
@@ -168,6 +172,12 @@ func applyFileConfig(cfg *Config, workDir string, fileCfg FileConfig) error {
 	if fileCfg.WebSessionSecret != nil {
 		cfg.WebSessionSecret = strings.TrimSpace(*fileCfg.WebSessionSecret)
 	}
+	if fileCfg.ManifestSigningPrivateKey != nil {
+		cfg.ManifestSigningPrivateKey = strings.TrimSpace(*fileCfg.ManifestSigningPrivateKey)
+	}
+	if fileCfg.ManifestSigningKeyID != nil {
+		cfg.ManifestSigningKeyID = strings.TrimSpace(*fileCfg.ManifestSigningKeyID)
+	}
 	return nil
 }
 
@@ -192,6 +202,12 @@ func applyEnvOverrides(cfg *Config, workDir string) error {
 	}
 	if value := strings.TrimSpace(os.Getenv("GENUPDATE_WEB_SESSION_SECRET")); value != "" {
 		cfg.WebSessionSecret = value
+	}
+	if value := strings.TrimSpace(os.Getenv("GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY")); value != "" {
+		cfg.ManifestSigningPrivateKey = value
+	}
+	if value := strings.TrimSpace(os.Getenv("GENUPDATE_MANIFEST_SIGNING_KEY_ID")); value != "" {
+		cfg.ManifestSigningKeyID = value
 	}
 	return nil
 }

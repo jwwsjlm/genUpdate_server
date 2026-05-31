@@ -123,7 +123,9 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 		"webSessionSecret": "session-secret",
 		"appTokens": {
 			"cc": "file-token"
-		}
+		},
+		"manifestSigningPrivateKey": "file-signing-key",
+		"manifestSigningKeyID": "file-key-id"
 	}`)
 	t.Setenv("GENUPDATE_CONFIG", "")
 	t.Setenv("GENUPDATE_PORT", "")
@@ -155,6 +157,9 @@ func TestLoadFromDefaultConfigFile(t *testing.T) {
 	if cfg.WebPasswordHash != "$2a$10$example" || cfg.WebSessionSecret != "session-secret" {
 		t.Fatalf("web auth config = hash %q secret %q", cfg.WebPasswordHash, cfg.WebSessionSecret)
 	}
+	if cfg.ManifestSigningPrivateKey != "file-signing-key" || cfg.ManifestSigningKeyID != "file-key-id" {
+		t.Fatalf("manifest signing config = key %q id %q", cfg.ManifestSigningPrivateKey, cfg.ManifestSigningKeyID)
+	}
 }
 
 func TestLoadEnvOverridesConfigFile(t *testing.T) {
@@ -175,6 +180,8 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	t.Setenv("GENUPDATE_APP_TOKENS", "cc=env-token")
 	t.Setenv("GENUPDATE_WEB_PASSWORD_HASH", "$2a$10$env")
 	t.Setenv("GENUPDATE_WEB_SESSION_SECRET", "env-session-secret")
+	t.Setenv("GENUPDATE_MANIFEST_SIGNING_PRIVATE_KEY", "env-signing-key")
+	t.Setenv("GENUPDATE_MANIFEST_SIGNING_KEY_ID", "env-key-id")
 
 	cfg, err := Load(workDir)
 	if err != nil {
@@ -194,6 +201,9 @@ func TestLoadEnvOverridesConfigFile(t *testing.T) {
 	}
 	if cfg.WebPasswordHash != "$2a$10$env" || cfg.WebSessionSecret != "env-session-secret" {
 		t.Fatalf("web auth config = hash %q secret %q", cfg.WebPasswordHash, cfg.WebSessionSecret)
+	}
+	if cfg.ManifestSigningPrivateKey != "env-signing-key" || cfg.ManifestSigningKeyID != "env-key-id" {
+		t.Fatalf("manifest signing config = key %q id %q", cfg.ManifestSigningPrivateKey, cfg.ManifestSigningKeyID)
 	}
 }
 
