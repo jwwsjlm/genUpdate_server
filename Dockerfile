@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM --platform=$BUILDPLATFORM golang:1.26.3-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS build
 
 WORKDIR /src
 
@@ -16,7 +16,7 @@ ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" -o /out/genupdate-server ./cmd/main
 
-FROM alpine:3.22
+FROM alpine:3.23
 
 RUN addgroup -S app \
     && adduser -S -G app app \
